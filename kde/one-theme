@@ -1,0 +1,295 @@
+#!/usr/bin/env python3
+"""Install and apply the One theme for KDE Plasma.
+
+  one-theme build    [--accent NAME] [--wall NAME]
+  one-theme install  copy build/kde into ~/.local/share and ~/.config
+  one-theme apply    [--mode light|dark|auto (default: keep current)] [--layout] [--live]
+  one-theme restore  [BACKUP]   put back the configs saved by the last apply
+  one-theme uninstall
+  one-theme dm       print the root commands for the login screen
+"""
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+BUILD = HERE.parent / "build" / "kde"
+HOME = Path.home()
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config"))
+DATA = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local/share"))
+STATE = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "onedesign"
+
+# files touched by apply, relative to CONFIG
+TOUCHED = ["kdeglobals", "kwinrc", "plasmarc", "ksplashrc", "kcminputrc", "konsolerc",
+           "plasma-org.kde.plasma.desktop-appletsrc", "plasmashellrc", "Kvantum/kvantum.kvconfig",
+           "gtk-3.0/gtk.css", "gtk-4.0/gtk.css"]
+# lock screen: copy of the system shell package with our LockScreenUi.qml (see lockscreen/sync.sh)
+SHELL_COPY = DATA / "plasma/shells/org.kde.plasma.desktop"
+LOCK_SYNC = "plasma-workspace/env/onedesign-lockscreen.sh"
+GTK_BEGIN, GTK_END = "/* oneDesign:begin */", "/* oneDesign:end */"
+
+
+def manifest():
+    p = BUILD / "manifest.json"
+    if not p.exists():
+        sys.exit("build/kde is missing, run `one-theme build` first")
+    return json.loads(p.read_text())
+
+
+def run(*cmd, check=True, quiet=False):
+    if not quiet:
+        print("+", " ".join(cmd))
+    return subprocess.run(cmd, check=check)
+
+
+def kwrite(file, group, key, value, quiet=False):
+    groups = []
+    for g in group.split("]["):
+        groups += ["--group", g]
+    run("kwriteconfig6", "--file", str(CONFIG / file), *groups, "--key", key, str(value), quiet=quiet)
+
+
+def kread(file, group, key):
+    r = subprocess.run(["kreadconfig6", "--file", str(CONFIG / file), "--group", group, "--key", key],
+                       capture_output=True, text=True)
+    return r.stdout.strip()
+
+
+def installed_files():
+    out = []
+    for src in (BUILD / "share").rglob("*"):
+        if src.is_file():
+            out.append((src, DATA / src.relative_to(BUILD / "share")))
+    for src in (BUILD / "config").rglob("*"):
+        if src.is_file():
+            out.append((src, CONFIG / src.relative_to(BUILD / "config")))
+    return out
+
+
+def cmd_build(a):
+    args = [sys.executable, str(HERE / "build.py"), "--accent", a.accent, "--wall", a.wall]
+    run(*args)
+
+
+def cmd_install(a):
+    manifest()
+    for top in ("share/color-schemes", "share/aurorae/themes", "share/plasma/desktoptheme",
+                "share/plasma/look-and-feel", "share/wallpapers", "share/konsole", "share/fonts", "share/icons"):
+        for item in (BUILD / top).iterdir():
+            dst = DATA / item.relative_to(BUILD / "share")
+            if dst.is_dir():
+                shutil.rmtree(dst)
+    files = installed_files()
+    for src, dst in files:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+    run("bash", str(CONFIG / LOCK_SYNC), quiet=True)
+    STATE.mkdir(parents=True, exist_ok=True)
+    (STATE / "installed.txt").write_text("\n".join(str(d) for _, d in files) + "\n")
+    if shutil.which("fc-cache"):
+        run("fc-cache", "-f", str(DATA / "fonts" / "oneDesign"), check=False)
+    print(f"installed {len(files)} files")
+
+
+def backup():
+    dst = STATE / "backup" / time.strftime("%Y%m%d-%H%M%S")
+    for rel in TOUCHED:
+        src = CONFIG / rel
+        if src.exists():
+            (dst / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst / rel)
+    dst.mkdir(parents=True, exist_ok=True)
+    (dst / "files.txt").write_text("\n".join(r for r in TOUCHED if (CONFIG / r).exists()) + "\n")
+    print(f"backed up configs to {dst}")
+    return dst
+
+
+def merge_scheme(path):
+    """What plasma-apply-colorscheme does: copy every color group into kdeglobals."""
+    group = None
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if line.startswith("["):
+            group = line[1:-1]
+        elif "=" in line and group and not line.startswith("#") and group != "General":
+            key, val = line.split("=", 1)
+            kwrite("kdeglobals", group, key, val, quiet=True)
+
+
+def gtk_strip(text):
+    while GTK_BEGIN in text and GTK_END in text:
+        i, j = text.index(GTK_BEGIN), text.index(GTK_END) + len(GTK_END)
+        text = (text[:i].rstrip("\n") + "\n" + text[j:].lstrip("\n")).strip("\n")
+        text = text + "\n" if text else ""
+    return text
+
+
+def apply_gtk():
+    for ver in ("3", "4"):
+        css = (BUILD / "gtk" / f"gtk{ver}.css").read_text()
+        p = CONFIG / f"gtk-{ver}.0" / "gtk.css"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        old = gtk_strip(p.read_text()) if p.exists() else ""
+        p.write_text((old + "\n" if old else "") + css)
+
+
+def cmd_apply(a):
+    m = manifest()
+    if a.mode is None:
+        current = kread("kdeglobals", "KDE", "LookAndFeelPackage")
+        a.mode = "dark" if current == m["lookandfeel"]["dark"] else "light"
+    backup()
+    dark = a.mode == "dark"
+    lf = m["lookandfeel"]["dark" if dark else "light"]
+    scheme = "OneDark" if dark else "OneLight"
+    if a.live and shutil.which("plasma-apply-lookandfeel"):
+        args = ["plasma-apply-lookandfeel", "-a", lf]
+        if a.layout:
+            args.append("--resetLayout")
+        run(*args)
+    else:
+        defaults = (DATA / "plasma/look-and-feel" / lf / "contents/defaults").read_text()
+        group = None
+        for line in defaults.splitlines():
+            line = line.strip()
+            if line.startswith("["):
+                group = line
+            elif "=" in line and group:
+                key, val = line.split("=", 1)
+                parts = group[1:-1].split("][")
+                if parts[0] == "Wallpaper":
+                    continue
+                kwrite(parts[0], "][".join(parts[1:]), key, val)
+        kwrite("kdeglobals", "KDE", "LookAndFeelPackage", lf)
+        merge_scheme(DATA / "color-schemes" / f"{scheme}.colors")
+        if a.layout:
+            p = CONFIG / "plasma-org.kde.plasma.desktop-appletsrc"
+            if p.exists():
+                p.unlink()
+    kwrite("kdeglobals", "KDE", "AutomaticLookAndFeel", "true" if a.mode == "auto" else "false")
+    kwrite("kdeglobals", "KDE", "DefaultLightLookAndFeel", m["lookandfeel"]["light"])
+    kwrite("kdeglobals", "KDE", "DefaultDarkLookAndFeel", m["lookandfeel"]["dark"])
+    kwrite("Kvantum/kvantum.kvconfig", "General", "theme", "One")
+    for key, val in m["fonts"].items():
+        file, group, k = key.split("/")
+        kwrite(file, group, k, val)
+    kwrite("kwinrc", "org.kde.kdecoration2", "BorderSize", "None")
+    kwrite("kwinrc", "org.kde.kdecoration2", "BorderSizeAuto", "false")
+    kwrite("kwinrc", "Plugins", "blurEnabled", "true")
+    kwrite("kwinrc", "Plugins", "contrastEnabled", "true")
+    kwrite("kwinrc", "Effect-blur", "BlurStrength", "15")
+    kwrite("kwinrc", "Effect-blur", "NoiseStrength", "2")
+    kwrite("konsolerc", "Desktop Entry", "DefaultProfile", f"{scheme}.profile")
+    kwrite("konsolerc", "LightDarkTheme", "SyncProfileWithSystemTheme", "true")
+    kwrite("konsolerc", "LightDarkTheme", "LightThemeProfile", "OneLight")
+    kwrite("konsolerc", "LightDarkTheme", "DarkThemeProfile", "OneDark")
+    apply_gtk()
+    if a.live:
+        wall = DATA / "wallpapers" / m["wallpaper"]
+        if shutil.which("plasma-apply-wallpaperimage") and wall.exists():
+            run("plasma-apply-wallpaperimage", str(wall), check=False)
+        if shutil.which("qdbus6"):
+            run("qdbus6", "org.kde.KWin", "/KWin", "reconfigure", check=False)
+    print(f"applied {lf}. Log out and back in for fonts and Qt style to reach every app.")
+
+
+def cmd_restore(a):
+    root = STATE / "backup"
+    snaps = sorted(root.iterdir()) if root.exists() else []
+    if not snaps:
+        sys.exit("no backups")
+    snap = root / a.backup if a.backup else snaps[-1]
+    saved = set((snap / "files.txt").read_text().split())
+    for rel in TOUCHED:
+        dst = CONFIG / rel
+        if rel in saved:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(snap / rel, dst)
+        elif dst.exists() and rel.startswith("gtk-"):
+            text = gtk_strip(dst.read_text())
+            dst.write_text(text) if text else dst.unlink()
+        elif dst.exists():
+            dst.unlink()
+    print(f"restored {snap}")
+
+
+def cmd_uninstall(a):
+    lst = STATE / "installed.txt"
+    if not lst.exists():
+        sys.exit("nothing installed")
+    roots = {DATA / t for t in ("color-schemes", "aurorae/themes", "plasma/desktoptheme", "plasma/look-and-feel",
+                                "wallpapers", "konsole", "fonts", "icons", "plasma/plasmoids")} | {CONFIG / "Kvantum"}
+    dirs = set()
+    for line in lst.read_text().split("\n"):
+        p = Path(line)
+        if line and p.is_file():
+            p.unlink()
+        if line:
+            for parent in p.parents:
+                if parent in roots or not any(parent.is_relative_to(r) for r in roots):
+                    break
+                dirs.add(parent)
+    for d in sorted(dirs, key=lambda d: len(d.parts), reverse=True):
+        if d.is_dir() and not any(d.iterdir()):
+            d.rmdir()
+    lst.unlink()
+    if (SHELL_COPY / ".onedesign").exists():
+        shutil.rmtree(SHELL_COPY)
+    shutil.rmtree(DATA / "onedesign", ignore_errors=True)
+    print("removed theme files. Run `one-theme restore` to bring back your previous configs.")
+
+
+def cmd_dm(a):
+    m = manifest()
+    if a.plm:
+        wall = m["wallpaper"]
+        print(f"""# Plasma Login Manager: only wallpaper and Plasma colors can be themed.
+sudo cp -r {BUILD}/share/wallpapers/{wall} /usr/share/wallpapers/
+sudo cp -r {BUILD}/share/color-schemes/OneLight.colors {BUILD}/share/color-schemes/OneDark.colors /usr/share/color-schemes/
+sudo cp -r {BUILD}/share/plasma/desktoptheme/One /usr/share/plasma/desktoptheme/
+sudo cp -r {BUILD}/share/fonts/oneDesign /usr/share/fonts/
+sudo cp -r {BUILD}/share/icons/One {BUILD}/share/icons/One-Dark /usr/share/icons/
+sudo install -Dm644 {BUILD}/etc/plasmalogin.conf.d/one.conf /etc/plasmalogin.conf.d/one.conf
+# then: System Settings > Login Screen > Apply Plasma Settings""")
+        return
+    mode = "" if a.mode == "light" else f"\necho 'Mode=dark' | sudo tee /usr/share/sddm/themes/one/theme.conf.user >/dev/null"
+    print(f"""# SDDM with the One login screen (replaces Plasma Login Manager).
+sudo pacman -S --needed sddm adwaita-cursors
+sudo rm -rf /usr/share/sddm/themes/one
+sudo cp -r {BUILD}/share/sddm/themes/one /usr/share/sddm/themes/
+sudo install -Dm644 {BUILD}/etc/sddm.conf.d/one.conf /etc/sddm.conf.d/one.conf{mode}
+# optional avatar: sudo install -Dm644 ~/.face.icon /usr/share/sddm/faces/$USER.face.icon
+sudo systemctl disable plasmalogin.service
+sudo systemctl enable sddm.service
+# preview without switching: sddm-greeter-qt6 --test-mode --theme /usr/share/sddm/themes/one""")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    b = sub.add_parser("build")
+    b.add_argument("--accent", default="blue")
+    b.add_argument("--wall", default="lagoon")
+    sub.add_parser("install")
+    p = sub.add_parser("apply")
+    p.add_argument("--mode", choices=("light", "dark", "auto"), default=None,
+                   help="default: keep the current light/dark choice (light on first apply)")
+    p.add_argument("--layout", action="store_true", help="replace panels with the One top bar and dock")
+    p.add_argument("--live", action="store_true", help="use plasma-apply-* tools on the running session")
+    r = sub.add_parser("restore")
+    r.add_argument("backup", nargs="?")
+    sub.add_parser("uninstall")
+    d = sub.add_parser("dm", help="print the sudo commands to theme the login screen")
+    d.add_argument("--mode", choices=("light", "dark"), default="light")
+    d.add_argument("--plm", action="store_true", help="Plasma Login Manager instead of SDDM")
+    a = ap.parse_args()
+    globals()[f"cmd_{a.cmd}"](a)
+
+
+if __name__ == "__main__":
+    main()
