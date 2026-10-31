@@ -80,6 +80,43 @@ def field(seed, hues, dark):
     norm = np.maximum(weight, 1.0)
     A /= norm
     B /= norm
+
+    # Defined shapes so blur over glass reads as glass, not as a flat tint.
+    def blend(mask, hue, l, c):
+        nonlocal L, A, B
+        L += mask * (l - L)
+        A += mask * (c * math.cos(math.radians(hue)) - A)
+        B += mask * (c * math.sin(math.radians(hue)) - B)
+
+    def circle(cx, cy, r, soft):
+        d = np.sqrt((x - cx) ** 2 + ((y - cy) * H / W) ** 2)
+        return np.clip((r - d) / soft + 0.5, 0, 1), d
+
+    # large orbs with a lit upper edge
+    for i in range(3):
+        hue = hues[i % 3]
+        cx, cy, r = rng.uniform(0.1, 0.9), rng.uniform(0.15, 0.85), rng.uniform(0.12, 0.22)
+        m, d = circle(cx, cy, r, 0.004)
+        shade = np.clip(0.5 - (y - cy) * H / W / r * 0.5 + (x - cx) / r * -0.2, 0, 1)
+        l = (0.26 + 0.2 * shade) if dark else (0.68 + 0.26 * shade)
+        blend(m * 0.7, hue, l, 0.14 if dark else 0.12)
+        rim = np.exp(-(((d - r) / 0.0025) ** 2)) * np.clip(-(y - cy) / r, 0, 1)
+        L += rim * 0.35 * ((0.8 if dark else 1.0) - L)
+    # diagonal light streaks
+    for _ in range(3):
+        ang = math.radians(rng.uniform(-35, -20))
+        off = rng.uniform(-0.2, 1.0)
+        dist = (y - off) * math.cos(ang) - x * math.sin(ang) * W / H * 0.6
+        w = rng.uniform(0.002, 0.008)
+        s = np.exp(-((dist / w) ** 2)) * rng.uniform(0.12, 0.3)
+        L += s * ((0.7 if dark else 1.0) - L)
+    # bokeh
+    for _ in range(12):
+        hue = hues[rng.integers(0, 3)]
+        r = rng.uniform(0.008, 0.03)
+        m, _d = circle(rng.uniform(0, 1), rng.uniform(0, 1), r, r * 0.35)
+        blend(m * rng.uniform(0.15, 0.35), hue, 0.62 if dark else 0.98, 0.12 if dark else 0.06)
+
     C = np.sqrt(A * A + B * B)
     h = np.degrees(np.arctan2(B, A))
     # vignette for dark

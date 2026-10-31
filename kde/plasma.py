@@ -197,9 +197,9 @@ def glass_layers(r, alpha, rim=True):
     L = [(0, r, cs("Background", alpha), "fill")]
     if rim:
         L.append((0, r, lambda p: {"top": cs("#ffffff", SHEEN), "mid": 'fill="url(#sheen)"'}.get(_row(p), 'fill="none"'), "fill"))
-    L.append((0, r, cs("#000000", 0.10), ("stroke", 1)))
+    L.append((0, r, cs("#000000", 0.14), ("stroke", 1)))
     if rim:
-        L.append((1, r - 1, lambda p: cs("#ffffff", {"top": 0.24, "mid": 0.09, "bottom": 0.05}[_row(p)]), ("stroke", 1)))
+        L.append((1, r - 1, lambda p: cs("#ffffff", {"top": 0.38, "mid": 0.07, "bottom": 0.03}[_row(p)]), ("stroke", 1)))
     return L
 
 
@@ -394,9 +394,9 @@ enabled=true
 
 [ContrastEffect]
 enabled=true
-contrast=1
-intensity=1
-saturation=1
+contrast=0.2
+intensity=1.2
+saturation=1.4
 
 [BlurBehindEffect]
 enabled=true
@@ -411,13 +411,13 @@ def build(th, ident="One"):
     """Returns {relative path: text} for share/plasma/desktoptheme/<ident>/."""
     sh = th.shape
     rw, rc, rctl = sh["window"], sh["container"], sh["control"]
-    a_glass = 0.55
+    a_glass = 0.45
     files = {}
 
     panel = lambda alpha, sh_=True: surface_svg(rc, alpha, PANEL_PAD, S=24, with_shadow=sh_,
                                                 shadow_layers=((0.06, 1, 3), (0.16, 6, 18)), thick=True)
-    # Popups (launcher, tray, calendar) carry no drop shadow; hairline + rim + blur separate them.
-    dialog = lambda alpha, sh_=True: surface_svg(rc, alpha, 10, S=40, with_shadow=False)
+    dialog = lambda alpha, sh_=True: surface_svg(rc, alpha, 10, S=40, with_shadow=sh_,
+                                                 shadow_layers=((0.06, 1, 2), (0.14, 10, 30)))
     tooltip = lambda alpha, sh_=True: surface_svg(rctl, alpha, 8, S=24, with_shadow=sh_,
                                                   shadow_layers=((0.06, 1, 2), (0.16, 6, 14)))
     widget = lambda alpha, sh_=True: surface_svg(rw, alpha, 14, S=32, with_shadow=sh_,

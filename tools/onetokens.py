@@ -1,4 +1,4 @@
-"""Token resolver: tokens/languages.json -> concrete sRGB colors and metrics.
+"""Token resolver: tokens/one.json -> concrete sRGB colors and metrics.
 
 Mirrors prototypes/assets/engine.js computeVars so generated themes match the prototypes.
 """
@@ -12,7 +12,7 @@ WALLS = {"dune": 55, "lagoon": 220, "orchid": 320, "moss": 150}
 
 
 def load_tokens():
-    return json.loads((ROOT / "tokens" / "languages.json").read_text())
+    return json.loads((ROOT / "tokens" / "one.json").read_text())
 
 
 def _oklch_to_linear(L, C, H):
@@ -111,17 +111,16 @@ WHITE = Color(1, 1, 1)
 BLACK = Color(0, 0, 0)
 
 
-def resolve(lang_id="one", mode="light", accent="blue", wall="lagoon", tokens=None):
-    """Return a Theme object with colors (Color) and metrics for one language/mode/accent."""
+def resolve(mode="light", accent="blue", wall="lagoon", tokens=None):
+    """Return a Theme object with colors (Color) and metrics for one mode/accent."""
     t = tokens or load_tokens()
-    lang = next(l for l in t["languages"] if l["id"] == lang_id)
     if accent == "wallpaper":
         hue, chroma = WALLS[wall], 0.14
     else:
         hue, chroma = t["accents"][accent]["hue"], t["accents"][accent]["chroma"]
     dark = mode == "dark"
-    n = lang["color"]["neutral"][mode]
-    nc = lang["color"]["neutralChroma"]
+    n = t["color"]["neutral"][mode]
+    nc = t["color"]["neutralChroma"]
     ink = WHITE if dark else BLACK
     c = {}
     for role in ("desktop", "canvas", "sidebar", "surface", "surfaceAlt", "float", "headerbar"):
@@ -134,28 +133,31 @@ def resolve(lang_id="one", mode="light", accent="blue", wall="lagoon", tokens=No
     c["active"] = ink.with_alpha(0.12 if dark else 0.09)
     c["fill"] = ink.with_alpha(0.09 if dark else 0.06)
     c["fillStrong"] = ink.with_alpha(0.16 if dark else 0.12)
-    aL = lang["color"]["accent"][mode]
+    aL = t["color"]["accent"][mode]
     c["accent"] = Color.oklch(aL, chroma, hue)
     c["accentHover"] = Color.oklch(aL + (0.04 if dark else -0.04), chroma, hue)
     c["accentPressed"] = Color.oklch(aL + (0.08 if dark else -0.08), chroma, hue)
     c["onAccent"] = Color.oklch(0.2, min(chroma, 0.06), hue) if aL > 0.68 else WHITE
     c["accentText"] = Color.oklch(max(aL, 0.76) if dark else min(aL, 0.52), chroma, hue)
-    cL, ocL, cf = lang["color"]["container"][mode]
+    cL, ocL, cf = t["color"]["container"][mode]
     c["container"] = Color.oklch(cL, chroma * cf, hue)
     c["onContainer"] = Color.oklch(ocL, chroma * 0.8, hue)
     c["accentSoft"] = Color.oklch(aL, chroma, hue, 0.22 if dark else 0.14)
-    c["wallTint"] = Color.oklch(0.32 if dark else 0.86, chroma * 0.7, hue)
     for k, s in t["status"].items():
         c[k] = Color.oklch(0.74 if dark else 0.56, s["chroma"], s["hue"])
         c[k + "Soft"] = Color.oklch(0.74 if dark else 0.56, s["chroma"], s["hue"], 0.2 if dark else 0.13)
-    g = lang["glass"]
-    c["glass"] = c["float"].with_alpha(g["tint"][mode])
-    return Theme(lang=lang, tokens=t, mode=mode, dark=dark, hue=hue, chroma=chroma, accent=accent, c=c)
+    g = t["glass"]
+    # Glass flattened to one translucent color: tint layer over the luminosity layer.
+    lum, tint = g["lum"][mode], g["tint"][mode]
+    a = 1 - (1 - lum) * (1 - tint)
+    base = BLACK if dark else WHITE
+    c["glass"] = Color(*((tint * f + (1 - tint) * lum * b) / a for f, b in
+                         zip((c["float"].r, c["float"].g, c["float"].b), (base.r, base.g, base.b))), a)
+    return Theme(tokens=t, mode=mode, dark=dark, hue=hue, chroma=chroma, accent=accent, c=c)
 
 
 @dataclass
 class Theme:
-    lang: dict
     tokens: dict
     mode: str
     dark: bool
@@ -166,15 +168,15 @@ class Theme:
 
     @property
     def shape(self):
-        return self.lang["shape"]
+        return self.tokens["shape"]
 
     @property
     def density(self):
-        return self.lang["density"]
+        return self.tokens["density"]
 
     @property
     def glass(self):
-        return self.lang["glass"]
+        return self.tokens["glass"]
 
     def ok(self, L, C=None, H=None, a=1.0):
         return Color.oklch(L, self.chroma if C is None else C, self.hue if H is None else H, a)

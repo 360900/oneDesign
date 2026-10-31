@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>oneDesign proposals</title>
+<title>oneDesign</title>
 <style>
 @font-face { font-family: InterV; src: url(assets/fonts/InterVariable.woff2) format("woff2"); font-weight: 100 900; }
 :root { color-scheme: dark; --bg: #121214; --panel: #1b1b1e; --line: #ffffff14; --text: #ececf0; --dim: #9a9aa3; --acc: #6fb3ff; }
@@ -11,21 +11,12 @@ body { margin: 0; font: 13px/1.45 InterV, system-ui, sans-serif; background: var
 aside { background: var(--panel); border-right: 1px solid var(--line); overflow: auto; padding: 20px 16px; }
 h1 { font-size: 20px; margin: 0 0 2px; letter-spacing: -.01em; }
 .sub { color: var(--dim); margin-bottom: 18px; }
-.lang { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; cursor: pointer; transition: border-color .15s, background .15s; }
-.lang:hover { background: #ffffff06; }
-.lang.on { border-color: var(--acc); background: #6fb3ff10; }
-.lang h2 { font-size: 15px; margin: 0; display: flex; align-items: center; gap: 8px; }
-.lang .rec { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #0b1a2a; background: var(--acc); border-radius: 99px; padding: 1px 7px; }
-.lang p { margin: 4px 0 8px; color: var(--dim); }
-.bars { display: flex; height: 6px; border-radius: 3px; overflow: hidden; gap: 2px; }
-.bars i { display: block; }
-.legend { display: flex; gap: 2px 8px; margin-top: 6px; color: var(--dim); font-size: 11px; flex-wrap: wrap; }
-.legend b { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
-.lang ul { margin: 8px 0 0; padding-left: 16px; color: var(--text); display: none; }
-.lang.on ul { display: block; }
-.lang li { margin: 2px 0; }
-.facts { display: none; grid-template-columns: auto 1fr; gap: 2px 10px; margin-top: 8px; font-size: 12px; color: var(--dim); }
-.lang.on .facts { display: grid; }
+.info { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.info h2 { font-size: 15px; margin: 0; }
+.info p { margin: 4px 0 8px; color: var(--dim); }
+.info ul { margin: 8px 0 0; padding-left: 16px; }
+.info li { margin: 2px 0; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin-top: 8px; font-size: 12px; color: var(--dim); }
 .facts span:nth-child(even) { color: var(--text); }
 main { display: grid; grid-template-rows: auto 1fr; min-width: 0; }
 .bar { display: flex; gap: 14px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
@@ -43,7 +34,6 @@ a.open { color: var(--acc); text-decoration: none; }
 .frame iframe { width: 1600px; height: 1000px; border: 0; display: block; background: #000; }
 .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .cell .cap { margin: 0 0 6px; font-weight: 600; }
-.cell .cap small { color: var(--dim); font-weight: 400; margin-left: 6px; }
 .cell .box { width: 100%; aspect-ratio: 16 / 10; position: relative; overflow: hidden; border-radius: 10px; box-shadow: 0 6px 24px #0008; }
 .cell iframe { width: 1600px; height: 1000px; border: 0; transform-origin: 0 0; position: absolute; left: 0; top: 0; pointer-events: none; }
 .cell { cursor: pointer; }
@@ -52,8 +42,8 @@ a.open { color: var(--acc); text-decoration: none; }
 <body>
 <aside>
   <h1>oneDesign</h1>
-  <div class="sub">Five design-language proposals for a unified Linux desktop. Pick one, then the same tokens generate GTK, Qt, KDE, GDM/SDDM and app themes.</div>
-  <div id="langs"></div>
+  <div class="sub">One design language for a unified Linux desktop. The same tokens generate GTK, Qt, KDE, GDM/SDDM and app themes.</div>
+  <div class="info" id="info"></div>
 </aside>
 <main>
   <div class="bar">
@@ -68,8 +58,8 @@ a.open { color: var(--acc); text-decoration: none; }
   <div class="stage" id="stage"></div>
 </main>
 <script>
-const LIN = { adwaita: "#78aeed", fluent: "#f2a65a", material: "#8bd18b", glass: "#d6a2f0" };
-const S = Object.assign({ view: "explore", lang: "one", scene: "desktop", mode: "light", wall: "lagoon", accent: "wallpaper" },
+const SCENES = [["desktop", "Desktop"], ["settings", "Settings"], ["apps", "Apps"], ["components", "Components"], ["login", "Login"]];
+const S = Object.assign({ view: "explore", scene: "desktop", mode: "light", wall: "lagoon", accent: "wallpaper" },
   Object.fromEntries(new URLSearchParams(location.hash.slice(1))));
 let T;
 
@@ -78,31 +68,21 @@ const seg = (id, opts) => {
   el.innerHTML = opts.map(([v, l]) => `<button data-v="${v}" class="${S[id] === v ? "on" : ""}">${l}</button>`).join("");
   el.onclick = (e) => { const v = e.target.dataset.v; if (v) { S[id] = v; render(); } };
 };
-const url = (lang) => `view.html?lang=${lang}&scene=${S.scene}&mode=${S.mode}&wall=${S.wall}&accent=${S.accent}`;
+const url = (scene) => `view.html?scene=${scene}&mode=${S.mode}&wall=${S.wall}&accent=${S.accent}`;
 
 function sidebar() {
-  document.getElementById("langs").innerHTML = T.languages.map((l) => {
-    const lin = Object.entries(l.lineage);
-    return `<div class="lang ${S.lang === l.id ? "on" : ""}" data-id="${l.id}">
-      <h2>${l.name}${l.recommended ? '<span class="rec">Recommended</span>' : ""}</h2>
-      <p>${l.tagline}</p>
-      <div class="bars">${lin.map(([k, v]) => `<i style="flex:${v};background:${LIN[k]}"></i>`).join("")}</div>
-      <div class="legend">${lin.map(([k, v]) => `<span><b style="background:${LIN[k]}"></b>${k} ${v}%</span>`).join("")}</div>
-      <ul>${l.principles.map((p) => `<li>${p}</li>`).join("")}</ul>
-      <div class="facts">
-        <span>Font</span><span>${l.font.ui}</span>
-        <span>Icons</span><span>${l.icons}</span>
-        <span>Radii</span><span>${["window", "container", "control", "small"].map((k) => l.shape[k]).join(" / ")} px</span>
-        <span>Control</span><span>${l.density.control} px, rows ${l.density.row} px</span>
-        <span>Surfaces</span><span>${Object.entries(l.materials).map(([k, v]) => `${k}: ${v}`).join(", ")}</span>
-        <span>Shell</span><span>${l.shell.layout}</span>
-        <span>Window</span><span>${l.controls.wm} buttons, ${l.controls.toolbar} toolbar</span>
-      </div>
+  const g = T.glass;
+  document.getElementById("info").innerHTML = `<h2>${T.name}</h2>
+    <p>${T.tagline}</p>
+    <ul>${T.principles.map((p) => `<li>${p}</li>`).join("")}</ul>
+    <div class="facts">
+      <span>Font</span><span>${T.font.ui}, ${T.font.mono}</span>
+      <span>Icons</span><span>${T.icons}</span>
+      <span>Radii</span><span>${["window", "container", "control", "small"].map((k) => T.shape[k]).join(" / ")} px</span>
+      <span>Control</span><span>${T.density.control} px, rows ${T.density.row} px</span>
+      <span>Surfaces</span><span>${Object.entries(T.materials).map(([k, v]) => `${k}: ${v}`).join(", ")}</span>
+      <span>Glass</span><span>blur ${g.blur}, saturate ${g.saturate}, noise ${g.noise}</span>
     </div>`;
-  }).join("");
-  document.getElementById("langs").onclick = (e) => {
-    const c = e.target.closest(".lang"); if (c) { S.lang = c.dataset.id; S.view = "explore"; render(); }
-  };
 }
 
 function fit() {
@@ -118,8 +98,8 @@ function fit() {
 
 function render() {
   location.hash = new URLSearchParams(S).toString();
-  seg("view", [["explore", "Explore"], ["compare", "Compare all"]]);
-  seg("scene", [["desktop", "Desktop"], ["settings", "Settings"], ["apps", "Apps"], ["components", "Components"], ["login", "Login"]]);
+  seg("view", [["explore", "Explore"], ["all", "All scenes"]]);
+  seg("scene", SCENES);
   seg("mode", [["light", "Light"], ["dark", "Dark"]]);
   seg("wall", Object.keys(T.walls).map((w) => [w, w[0].toUpperCase() + w.slice(1)]));
   const acc = document.getElementById("accent");
@@ -127,17 +107,17 @@ function render() {
     Object.entries(T.accents).map(([k, a]) => `<button data-v="${k}" title="${k}" class="${S.accent === k ? "on" : ""}" style="background:oklch(.62 ${Math.max(a.chroma, .03)} ${a.hue})"></button>`).join("");
   acc.onclick = (e) => { const v = e.target.dataset.v; if (v) { S.accent = v; render(); } };
   sidebar();
-  document.getElementById("open").href = url(S.lang);
+  document.getElementById("open").href = url(S.scene);
   const st = document.getElementById("stage");
   st.innerHTML = S.view === "explore"
-    ? `<div><div class="frame"><iframe src="${url(S.lang)}"></iframe></div></div>`
-    : `<div class="grid">${T.languages.map((l) => `<div class="cell" data-id="${l.id}"><div class="cap">${l.name}<small>${l.tagline}</small></div><div class="box"><iframe loading="lazy" src="${url(l.id)}"></iframe></div></div>`).join("")}</div>`;
-  st.onclick = (e) => { const c = e.target.closest(".cell"); if (c) { S.lang = c.dataset.id; S.view = "explore"; render(); } };
+    ? `<div><div class="frame"><iframe src="${url(S.scene)}"></iframe></div></div>`
+    : `<div class="grid">${SCENES.map(([k, l]) => `<div class="cell" data-id="${k}"><div class="cap">${l}</div><div class="box"><iframe loading="lazy" src="${url(k)}"></iframe></div></div>`).join("")}</div>`;
+  st.onclick = (e) => { const c = e.target.closest(".cell"); if (c) { S.scene = c.dataset.id; S.view = "explore"; render(); } };
   requestAnimationFrame(fit);
 }
 
 addEventListener("resize", fit);
-Promise.all([fetch("../tokens/languages.json").then((r) => r.json()), fetch("assets/wallpapers/manifest.json").then((r) => r.json())])
+Promise.all([fetch("../tokens/one.json").then((r) => r.json()), fetch("assets/wallpapers/manifest.json").then((r) => r.json())])
   .then(([t, w]) => { T = t; T.walls = Object.fromEntries(w.map((x) => [x.id, x.hue])); render(); });
 </script>
 </body>

@@ -1,6 +1,6 @@
 # One for KDE Plasma
 
-Generated from `tokens/languages.json` (language `one`) by `kde/build.py`.
+Generated from `tokens/one.json` by `kde/build.py`.
 Accent and wallpaper are baked at build time because Kvantum SVGs cannot follow the KDE accent.
 
 ## Requirements
@@ -35,7 +35,7 @@ tools/kde_preview.sh dark /tmp/one.png "dolphin"
 |---|---|---|
 | `share/color-schemes/One{Light,Dark}.colors` | `colors.py` | Merged into kdeglobals on apply |
 | `config/Kvantum/One/` | `kvantum.py` | `One` and `OneDark` (style `kvantum` / `kvantum-dark`) |
-| `share/plasma/desktoptheme/One/` | `plasma.py` | Glass panels, dialogs, tooltips (sheen + top-lit rim, no extra saturation); solid/opaque fallbacks. `apply` sets KWin blur strength 15, noise 2 |
+| `share/plasma/desktoptheme/One/` | `plasma.py` | Glass panels, dialogs, tooltips (sheen, crisp top rim, KWin contrast with extra saturation); solid/opaque fallbacks. `apply` sets KWin blur strength 15, noise 2 |
 | `share/aurorae/themes/One{Light,Dark}/` | `aurorae.py` | Header-colored titlebar, round buttons, soft shadow |
 | `share/plasma/look-and-feel/org.onedesign.one{,-dark}.desktop/` | `lnf.py` | Defaults, panel layout, splash, previews |
 | `share/wallpapers/One-*/` | `extras.py` | Light and dark images |

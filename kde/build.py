@@ -52,7 +52,7 @@ def build(out, accent="blue", wall="lagoon"):
         shutil.rmtree(out)
     wallpaper = f"One-{wall.capitalize()}"
     for mode, scheme, kv in MODES:
-        th = resolve("one", mode, accent, wall)
+        th = resolve(mode, accent, wall)
         write(out, f"share/color-schemes/{scheme}.colors", colors.scheme(th, scheme.replace("One", "One "), scheme))
         svg, cfg = kvantum.build(th, kv)
         write(out, f"config/Kvantum/One/{kv}.svg", svg)
@@ -68,16 +68,16 @@ def build(out, accent="blue", wall="lagoon"):
         write(out, f"share/konsole/{scheme}.colorscheme", extras.konsole(th, scheme))
         write(out, f"share/konsole/{scheme}.profile", extras.konsole_profile(scheme).replace("Name=One", f"Name={scheme}"))
     for ver in (3, 4):
-        write(out, f"gtk/gtk{ver}.css", extras.gtk_css(resolve("one", "light", accent, wall),
-                                                    resolve("one", "dark", accent, wall), ver))
-    for rel, data in plasma.build(resolve("one", "light", accent, wall)).items():
+        write(out, f"gtk/gtk{ver}.css", extras.gtk_css(resolve("light", accent, wall),
+                                                    resolve("dark", accent, wall), ver))
+    for rel, data in plasma.build(resolve("light", accent, wall)).items():
         write(out, f"share/plasma/desktoptheme/One/{rel}", data)
     for rel, data in extras.wallpapers().items():
         write(out, f"share/wallpapers/{rel}", data)
     for name, data in extras.fonts().items():
         write(out, f"share/fonts/oneDesign/{name}", data)
     write(out, "etc/plasmalogin.conf.d/one.conf", extras.plasmalogin_conf(wall))
-    for rel, data in sddm.build([resolve("one", m, accent, wall) for m in ("light", "dark")], wall).items():
+    for rel, data in sddm.build([resolve(m, accent, wall) for m in ("light", "dark")], wall).items():
         write(out, f"share/sddm/themes/one/{rel}", data)
     write(out, "etc/sddm.conf.d/one.conf", "[Theme]\nCurrent=one\nCursorTheme=Adwaita\n")
     qs = HERE / "quicksettings"
@@ -87,7 +87,7 @@ def build(out, accent="blue", wall="lagoon"):
     write(out, "share/onedesign/lockscreen/LockScreenUi.qml", (HERE / "lockscreen/LockScreenUi.qml").read_text())
     write(out, "config/plasma-workspace/env/onedesign-lockscreen.sh", (HERE / "lockscreen/sync.sh").read_text())
     write(out, "manifest.json", json.dumps({
-        "language": "one", "accent": accent, "wallpaper": wallpaper,
+        "accent": accent, "wallpaper": wallpaper,
         "lookandfeel": {"light": lnf.ident(False), "dark": lnf.ident(True)},
         "fonts": {"/".join(k): v for k, v in extras.font_settings().items()},
     }, indent=2) + "\n")

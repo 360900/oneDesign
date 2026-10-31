@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bundle reference SVG icons into prototypes/assets/icons.js, keyed by semantic name and family."""
+"""Bundle reference SVG icons into prototypes/assets/icons.js, keyed by semantic name."""
 import json
 import re
 from pathlib import Path
@@ -73,19 +73,13 @@ def load(family: str, name: str | None) -> str | None:
 
 
 def main() -> None:
-    out = {"adwaita": {}, "fluent": {}, "fluentFilled": {}, "material": {}}
+    # Adwaita symbolic first; Fluent then Material fill gaps Adwaita doesn't cover.
+    out = {}
     for key, (adw, flu, mat) in MAP.items():
-        m = load("material", mat)
-        f = load("fluent", flu) or m
-        ff = load("fluent-filled", flu) or f
-        a = load("adwaita", adw) or f
-        out["adwaita"][key] = a
-        out["fluent"][key] = f
-        out["fluentFilled"][key] = ff
-        out["material"][key] = m or f
+        out[key] = load("adwaita", adw) or load("fluent", flu) or load("material", mat)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text("window.ONE_ICONS = " + json.dumps(out, separators=(",", ":")) + ";\n")
-    missing = [k for fam in out.values() for k, v in fam.items() if not v]
+    missing = [k for k, v in out.items() if not v]
     print(f"wrote {OUT} ({OUT.stat().st_size // 1024} KB), missing: {missing}")
 
 

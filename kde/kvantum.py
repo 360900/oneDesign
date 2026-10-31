@@ -421,7 +421,7 @@ def kvconfig(th, name, menu_F, menu_D, tip_F, tip_D):
         return x.hexa if x.a < .999 else x.hexs
 
     general = {
-        "author": "oneDesign", "comment": f"oneDesign {th.lang['name']} ({th.mode})",
+        "author": "oneDesign", "comment": f"oneDesign {th.tokens['name']} ({th.mode})",
         "x11drag": "menubar_and_primary_toolbar", "alt_mnemonic": "true", "left_tabs": "false",
         "attach_active_tab": "false", "mirror_doc_tabs": "false", "group_toolbar_buttons": "false",
         "toolbar_item_spacing": "2", "toolbar_interior_spacing": "4", "spread_progressbar": "true",

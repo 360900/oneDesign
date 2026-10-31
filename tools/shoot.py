@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Render prototype scenes to PNG with headless Chromium.
 
-usage: shoot.py [--lang a,b] [--scene a,b] [--mode light,dark] [--wall lagoon] [--accent wallpaper] [--out renders]
+usage: shoot.py [--scene a,b] [--mode light,dark] [--wall lagoon] [--accent wallpaper] [--out renders]
 """
-import argparse, functools, http.server, json, subprocess, threading, sys
+import argparse, functools, http.server, subprocess, threading, sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -22,10 +22,10 @@ def serve():
     return srv
 
 
-def shoot(port, out, lang, scene, mode, wall, accent, scale):
-    name = f"{lang}-{scene}-{mode}.png"
-    url = f"http://127.0.0.1:{port}/prototypes/view.html?lang={lang}&scene={scene}&mode={mode}&wall={wall}&accent={accent}"
-    tmp = Path("/tmp/opencode") / f"chrome-{lang}-{scene}-{mode}"
+def shoot(port, out, scene, mode, wall, accent, scale):
+    name = f"{scene}-{mode}.png"
+    url = f"http://127.0.0.1:{port}/prototypes/view.html?scene={scene}&mode={mode}&wall={wall}&accent={accent}"
+    tmp = Path("/tmp/opencode") / f"chrome-{scene}-{mode}"
     cmd = ["chromium", "--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run",
            f"--user-data-dir={tmp}", f"--window-size={W},{H}", f"--force-device-scale-factor={scale}",
            "--virtual-time-budget=6000", f"--screenshot={out / name}", url]
@@ -35,9 +35,7 @@ def shoot(port, out, lang, scene, mode, wall, accent, scale):
 
 
 def main():
-    langs = [l["id"] for l in json.loads((ROOT / "tokens/languages.json").read_text())["languages"]]
     p = argparse.ArgumentParser()
-    p.add_argument("--lang", default=",".join(langs))
     p.add_argument("--scene", default="desktop,settings,login,components,apps")
     p.add_argument("--mode", default="light,dark")
     p.add_argument("--wall", default="lagoon")
@@ -49,7 +47,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     srv = serve()
     port = srv.server_address[1]
-    jobs = [(l, s, m) for l in a.lang.split(",") for s in a.scene.split(",") for m in a.mode.split(",")]
+    jobs = [(s, m) for s in a.scene.split(",") for m in a.mode.split(",")]
     with ThreadPoolExecutor(8) as ex:
         for name in ex.map(lambda j: shoot(port, out, *j, a.wall, a.accent, a.scale), jobs):
             print(name, flush=True)
