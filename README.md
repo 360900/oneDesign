@@ -1,8 +1,9 @@
 # oneDesign
 
-A design language for Linux that mixes Adwaita, Material 3, Fluent 2 and Liquid Glass,
-with five proposals rendered as interactive prototypes. Phase 2 generates GTK, Qt,
-KDE, GNOME Shell, GDM/SDDM and app themes from the same tokens.
+A design language for Linux. Calm, opaque content; glass only for what floats; one
+accent that tints everything; concentric rounded geometry; depth from hairlines and
+soft shadows. Themes KDE Plasma, Qt and GTK apps, window decorations, icons, and the
+lock and login screens.
 
 ## View
 
@@ -36,10 +37,14 @@ Static renders of every language, scene and mode are in `renders/`.
 | `tools/onetokens.py` | Python token resolver, mirrors `engine.js` |
 | `tools/kde_preview.sh` | Screenshots the theme in a nested, throwaway Plasma session |
 | `tools/qt_gallery.py` | Qt widget gallery for style testing |
-| `reference/` | Upstream tokens, icons and fonts the languages are derived from |
+| `reference/` | Upstream tokens, icons and fonts used by the generators |
 
 ## Credits
 
 Inter (OFL), Geist (OFL), Roboto Flex (OFL), Adwaita icons (CC-BY-SA / LGPL),
 Fluent UI System Icons (MIT), Material Symbols (Apache 2.0),
 Text editor and image viewer app icons from Papirus (GPL-3.0).
+
+## License
+
+GPL-3.0. Bundled fonts and icons keep their own licenses.
