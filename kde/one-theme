@@ -68,7 +68,16 @@ def installed_files():
     for src in (BUILD / "config").rglob("*"):
         if src.is_file():
             out.append((src, CONFIG / src.relative_to(BUILD / "config")))
+    for ver in freecad_dirs():
+        for src in (BUILD / "freecad").rglob("*"):
+            if src.is_file():
+                out.append((src, ver / src.relative_to(BUILD / "freecad")))
     return out
+
+
+def freecad_dirs():
+    """Per-version FreeCAD user data dirs (e.g. ~/.local/share/FreeCAD/v1-1) that already exist."""
+    return sorted(d for d in (DATA / "FreeCAD").glob("v*") if d.is_dir())
 
 
 def cmd_build(a):
@@ -224,6 +233,7 @@ def cmd_uninstall(a):
         sys.exit("nothing installed")
     roots = {DATA / t for t in ("color-schemes", "aurorae/themes", "plasma/desktoptheme", "plasma/look-and-feel",
                                 "wallpapers", "konsole", "fonts", "icons", "plasma/plasmoids")} | {CONFIG / "Kvantum"}
+    roots |= {d / t for d in freecad_dirs() for t in ("Mod", "Gui/Stylesheets")}
     dirs = set()
     for line in lst.read_text().split("\n"):
         p = Path(line)

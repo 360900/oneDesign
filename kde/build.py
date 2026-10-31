@@ -13,6 +13,7 @@ from onetokens import ROOT, WALLS, resolve  # noqa: E402
 import aurorae  # noqa: E402
 import colors  # noqa: E402
 import extras  # noqa: E402
+import freecad  # noqa: E402
 import icons  # noqa: E402
 import kvantum  # noqa: E402
 import lnf  # noqa: E402
@@ -70,6 +71,8 @@ def build(out, accent="blue", wall="lagoon"):
     for ver in (3, 4):
         write(out, f"gtk/gtk{ver}.css", extras.gtk_css(resolve("light", accent, wall),
                                                     resolve("dark", accent, wall), ver))
+    for rel, data in freecad.build([resolve(m, accent, wall) for m in ("light", "dark")]).items():
+        write(out, f"freecad/{rel}", data)
     for rel, data in plasma.build(resolve("light", accent, wall)).items():
         write(out, f"share/plasma/desktoptheme/One/{rel}", data)
     for rel, data in extras.wallpapers().items():

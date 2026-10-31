@@ -42,6 +42,7 @@ tools/kde_preview.sh dark /tmp/one.png "dolphin"
 | `share/icons/One{,-Dark}/` | `icons.py` | Accent folders, Adwaita symbolic icons; the rest inherits Papirus |
 | `share/konsole/` | `extras.py` | Color schemes and profiles |
 | `share/fonts/oneDesign/` | `extras.py` | Inter, Geist Mono |
+| `freecad/` | `freecad.py` | FreeCAD preference packs `One Light` / `One Dark` (3D view, sketcher, editor, stylesheet over the system Qt style) and a startup hook that swaps them to match the system color scheme, installed into each existing `~/.local/share/FreeCAD/v*` |
 | `gtk/gtk{3,4}.css` | `extras.py` | Appended to `gtk-{3,4}.0/gtk.css` between markers (GTK 4: both modes via `prefers-color-scheme`; GTK 3: shape only) |
 | `share/plasma/plasmoids/org.onedesign.quicksettings/` | `quicksettings/` | GNOME-style quick settings menu in the top bar |
 | `share/sddm/themes/one/`, `etc/sddm.conf.d/one.conf` | `sddm.py`, `sddm/Main.qml` | SDDM greeter |
@@ -64,5 +65,6 @@ prints the steps to at least give it the One wallpaper, colors and Plasma style.
 ## Limits
 
 - GTK apps get One colors and radii on top of libadwaita / Adwaita-gtk3, not full One widgets.
+- FreeCAD picks up light/dark switching on its next start. Select `One Light` or `One Dark` once under Preferences > General > Preference packs.
 - Lock screen uses the Breeze layout with One style and wallpaper.
 - Cursor stays Breeze. App and file-type icons come from Papirus; less common Papirus folder variants keep Papirus colors.
