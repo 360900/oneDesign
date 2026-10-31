@@ -386,8 +386,8 @@ def metadata(name, ident, desc):
 PLASMARC = """[Wallpaper]
 defaultWallpaperTheme=One-Lagoon
 defaultFileSuffix=.png
-defaultWidth=2400
-defaultHeight=1500
+defaultWidth=5120
+defaultHeight=3200
 
 [AdaptiveTransparency]
 enabled=true

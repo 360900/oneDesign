@@ -9,7 +9,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "prototypes" / "assets" / "wallpapers"
-W, H = 2400, 1500
+W, H = 5120, 3200
 
 
 def oklch_to_srgb(L, C, h):
@@ -134,7 +134,7 @@ def main():
         for dark in (False, True):
             img = field(i * 7 + 3, (hue, h2, h3), dark)
             fn = f"{name}-{'dark' if dark else 'light'}.webp"
-            img.save(OUT / fn, quality=88)
+            img.save(OUT / fn, quality=96, method=6, use_sharp_yuv=True)
         manifest.append({"id": name, "hue": hue})
     (OUT / "manifest.json").write_text(json.dumps(manifest, indent=2))
     print("ok", [m["id"] for m in manifest])
