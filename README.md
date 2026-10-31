@@ -29,7 +29,7 @@ Static renders of every scene and mode are in `renders/`.
 | `prototypes/assets/one.css`, `scenes.css` | Component and scene styles |
 | `prototypes/assets/scenes.js` | Desktop, settings, apps, components, login scenes |
 | `tools/build_icons.py` | Packs Adwaita icons (Fluent, Material fallbacks) into `icons.js` |
-| `tools/build_wallpapers.py` | Generates the four wallpapers (light/dark) |
+| `tools/build_wallpapers.py` | Renders the four wallpapers (light/dark) with Blender |
 | `tools/shoot.py` | Headless Chromium renders into `renders/` |
 | `docs/kde.md` | One for KDE Plasma: build, install, apply, limits |
 | `kde/` | KDE generators (`build.py`) and the `one-theme` CLI |
