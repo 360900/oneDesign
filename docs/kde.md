@@ -61,6 +61,8 @@ beside the clock. Each backend loads separately, so a missing service only hides
 `one-theme dm` prints the steps to switch to SDDM with the One greeter.
 Plasma Login Manager compiles its greeter and cannot load a custom theme; `one-theme dm --plm`
 prints the steps to at least give it the One wallpaper, colors and Plasma style.
+With face or fingerprint login (linux-hello, Howdy, fprintd), press Enter with an empty password
+on the SDDM greeter to start it; the module's status shows below the field.
 
 ## Limits
 

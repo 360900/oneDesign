@@ -26,12 +26,14 @@ Item {
     property string userName: manualUser ? manualName.text : (root.currentUser ? root.currentUser.uName : "")
     property bool busy: false
     property string message: ""
+    property bool messageIsInfo: false
 
     function login() {
         if (userName === "" || busy)
             return
         busy = true
         message = ""
+        messageIsInfo = false
         sddm.login(userName, password.text, sessionIndex)
     }
 
@@ -43,10 +45,18 @@ Item {
             busy = false
             password.text = ""
             message = cfg("TextFailed", "Wrong password, try again")
+            messageIsInfo = false
             shake.restart()
             password.forceActiveFocus()
         }
         function onLoginSucceeded() { busy = false }
+        // PAM info text, e.g. from face or fingerprint modules
+        function onInformationMessage(msg) {
+            if (!busy)
+                return
+            message = msg
+            messageIsInfo = true
+        }
     }
 
     // Users list model (hidden view, used for selection and the avatar strip)
@@ -214,7 +224,7 @@ Item {
                 text: root.message !== "" ? root.message
                      : keyboard.capsLock ? cfg("TextCapsLock", "Caps Lock is on")
                      : cfg("TextHint", "Enter your password")
-                color: root.message !== "" ? col("Danger") : col("Text2")
+                color: root.message !== "" && !root.messageIsInfo ? col("Danger") : col("Text2")
                 font { family: root.fontFamily; pixelSize: 12.5 * s; weight: keyboard.capsLock || root.message !== "" ? Font.DemiBold : Font.Normal }
             }
         }

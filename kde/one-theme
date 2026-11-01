@@ -277,6 +277,27 @@ sudo install -Dm644 {BUILD}/etc/sddm.conf.d/one.conf /etc/sddm.conf.d/one.conf{m
 sudo systemctl disable plasmalogin.service
 sudo systemctl enable sddm.service
 # preview without switching: sddm-greeter-qt6 --test-mode --theme /usr/share/sddm/themes/one""")
+    if found := pam_unlockers():
+        print(f"# {', '.join(found)} found in PAM: on the login screen, press Enter with an empty password to start it.")
+
+
+def pam_unlockers(service="sddm", seen=None):
+    """Face/fingerprint PAM modules reachable from a service's auth stack."""
+    names = {"pam_linux_hello": "linux-hello", "pam_howdy": "Howdy", "pam_fprintd": "fprintd"}
+    seen = set() if seen is None else seen
+    found = set()
+    path = next((d / service for d in (Path("/etc/pam.d"), Path("/usr/lib/pam.d")) if (d / service).is_file()), None)
+    if path is None or service in seen:
+        return []
+    seen.add(service)
+    for line in path.read_text(errors="ignore").splitlines():
+        f = line.split()
+        if not f or f[0].startswith("#") or f[0].lstrip("-") != "auth":
+            continue
+        if f[1] in ("include", "substack") and len(f) > 2:
+            found |= set(pam_unlockers(f[2], seen))
+        found |= {v for k, v in names.items() if k in line}
+    return sorted(found)
 
 
 def main():
