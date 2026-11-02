@@ -41,6 +41,17 @@ def wallpapers():
     return out
 
 
+def rail_wallpapers(wall):
+    """Small wallpaper thumbnails for the rail's workspace tiles: {relative path: bytes}."""
+    out = {}
+    for mode in ("light", "dark"):
+        img = Image.open(WALL_SRC / f"{wall}-{mode}.webp").convert("RGB").resize((240, 150), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, "JPEG", quality=85)
+        out[f"contents/images/wall-{mode}.jpg"] = buf.getvalue()
+    return out
+
+
 def konsole(th, name):
     a = th.ansi()
     rgb = lambda c: ",".join(str(v) for v in c.rgb255)

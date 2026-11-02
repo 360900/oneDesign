@@ -55,6 +55,7 @@ for _s, _n in _SIGNAL.items():
 # Tray items render at 22px while the quick settings glyphs are 16px; a padded
 # canvas keeps these at the same visual size.
 PADDED = {"klipper"}
+NEUTRAL_DEFAULT = ("edit-undo", "edit-redo", "edit-select")
 OPEN = ("folder", "folder-documents", "folder-download", "folder-music", "folder-pictures",
         "folder-videos", "folder-templates", "folder-publicshare", "folder-remote", "user-home")
 
@@ -200,6 +201,11 @@ def build(th, name):
             plain = f.name.replace("-symbolic", "")
             if ctxdir.name == "actions" and "rtl" not in f.name:
                 files[f"actions/16/{plain}"] = files[f"symbolic/{ctxdir.name}/{f.name}"]
+    # Spectacle draws these on a dark pill and does not recolor them, so the default must read on dark too
+    for n in NEUTRAL_DEFAULT:
+        src = next(ADWAITA.glob(f"actions/{n}-symbolic.svg"), None)
+        if src:
+            files[f"actions/16/{n}.svg"] = symbolic(src, "#aeb4bd")
     for kde_name, adw in ALIASES.items():
         src = next(ADWAITA.glob(f"*/{adw}-symbolic.svg"))
         svg = symbolic(src, default)

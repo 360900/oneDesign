@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="launchers" type="StringList"><default></default></entry>
+    <entry name="drawerWidth" type="Int"><default>264</default><min>220</min><max>440</max></entry>
+    <entry name="iconSize" type="Int"><default>28</default><min>20</min><max>40</max></entry>
+    <entry name="showRunning" type="Bool"><default>true</default></entry>
+    <entry name="showPinned" type="Bool"><default>true</default></entry>
+    <entry name="runningFirst" type="Bool"><default>true</default></entry>
+    <entry name="groupApps" type="Bool"><default>true</default></entry>
+    <entry name="appsOnlySearch" type="Bool"><default>false</default></entry>
+    <entry name="closeWhenUnfocused" type="Bool"><default>true</default></entry>
+    <entry name="showUserRow" type="Bool"><default>true</default></entry>
+    <entry name="showUserName" type="Bool"><default>true</default></entry>
+    <entry name="showSettingsButton" type="Bool"><default>true</default></entry>
+    <entry name="showLockButton" type="Bool"><default>true</default></entry>
+    <entry name="showPowerButton" type="Bool"><default>true</default></entry>
+  </group>
+</kcfg>

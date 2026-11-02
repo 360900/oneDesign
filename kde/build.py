@@ -48,7 +48,7 @@ def previews(mode):
     return {"preview.png": small.getvalue(), "fullscreenpreview.jpg": src.read_bytes()}
 
 
-def build(out, accent="blue", wall="lagoon"):
+def build(out, accent="blue", wall="lagoon", shell="bar"):
     if out.exists():
         shutil.rmtree(out)
     wallpaper = f"One-{wall.capitalize()}"
@@ -60,7 +60,7 @@ def build(out, accent="blue", wall="lagoon"):
         write(out, f"config/Kvantum/One/{kv}.kvconfig", cfg)
         for rel, data in aurorae.build(th, scheme).items():
             write(out, f"share/aurorae/themes/{scheme}/{rel}", data)
-        for rel, data in lnf.build(th, wallpaper).items():
+        for rel, data in lnf.build(th, wallpaper, shell).items():
             write(out, f"share/plasma/look-and-feel/{lnf.ident(th.dark)}/{rel}", data)
         for rel, data in previews(mode).items():
             write(out, f"share/plasma/look-and-feel/{lnf.ident(th.dark)}/contents/previews/{rel}", data)
@@ -73,8 +73,9 @@ def build(out, accent="blue", wall="lagoon"):
                                                     resolve("dark", accent, wall), ver))
     for rel, data in freecad.build([resolve(m, accent, wall) for m in ("light", "dark")]).items():
         write(out, f"freecad/{rel}", data)
-    for rel, data in plasma.build(resolve("light", accent, wall)).items():
-        write(out, f"share/plasma/desktoptheme/One/{rel}", data)
+    for mode, ident in (("light", "One"), ("dark", "OneDark")):
+        for rel, data in plasma.build(resolve(mode, accent, wall), ident).items():
+            write(out, f"share/plasma/desktoptheme/{ident}/{rel}", data)
     for rel, data in extras.wallpapers().items():
         write(out, f"share/wallpapers/{rel}", data)
     for name, data in extras.fonts().items():
@@ -87,10 +88,21 @@ def build(out, accent="blue", wall="lagoon"):
     for f in sorted(qs.rglob("*")):
         if f.is_file():
             write(out, f"share/plasma/plasmoids/org.onedesign.quicksettings/{f.relative_to(qs)}", f.read_text())
+    for src, ident in (("rail", "org.onedesign.rail"), ("notifications", "org.onedesign.notifications"), ("clock", "org.onedesign.clock"), ("drawer", "org.onedesign.drawer")):
+        for f in sorted((HERE / src).rglob("*")):
+            if f.is_file():
+                write(out, f"share/plasma/plasmoids/{ident}/{f.relative_to(HERE / src)}", f.read_text())
+    for ident in ("org.onedesign.rail", "org.onedesign.drawer"):
+        write(out, f"share/plasma/plasmoids/{ident}/contents/actions.sh", (HERE / "shared/actions.sh").read_text())
+        write(out, f"share/plasma/plasmoids/{ident}/contents/ui/ConfigPinned.qml", (HERE / "shared/ConfigPinned.qml").read_text())
+    for rel, data in extras.rail_wallpapers(wall).items():
+        write(out, f"share/plasma/plasmoids/org.onedesign.rail/{rel}", data)
     write(out, "share/onedesign/lockscreen/LockScreenUi.qml", (HERE / "lockscreen/LockScreenUi.qml").read_text())
     write(out, "config/plasma-workspace/env/onedesign-lockscreen.sh", (HERE / "lockscreen/sync.sh").read_text())
     write(out, "manifest.json", json.dumps({
         "accent": accent, "wallpaper": wallpaper,
+        "kwin": {"blurStrength": max(1, round(resolve("light", accent, wall).tokens["glass"]["blur"] / 6)),
+                 "noiseStrength": 2},
         "lookandfeel": {"light": lnf.ident(False), "dark": lnf.ident(True)},
         "fonts": {"/".join(k): v for k, v in extras.font_settings().items()},
     }, indent=2) + "\n")
@@ -100,10 +112,11 @@ def build(out, accent="blue", wall="lagoon"):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--accent", default="blue", help="accent name from tokens, or 'wallpaper'")
+    ap.add_argument("--shell", default="bar", choices=("bar", "rail"), help="panel layout: top bar + dock, or left rail")
     ap.add_argument("--wall", default="lagoon", choices=list(WALLS))
     ap.add_argument("--out", default=str(ROOT / "build" / "kde"))
     a = ap.parse_args()
-    out = build(Path(a.out), a.accent, a.wall)
+    out = build(Path(a.out), a.accent, a.wall, a.shell)
     n = sum(1 for p in out.rglob("*") if p.is_file())
     print(f"built {n} files into {out}")
 

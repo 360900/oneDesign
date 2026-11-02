@@ -10,6 +10,7 @@ bar.height = 36;
 bar.floating = true;
 bar.lengthMode = "fill";
 bar.hiding = "none";
+bar.opacity = "translucent";
 // Keeps the square pager cells clear of the bar's rounded corner
 var lead = bar.addWidget("org.kde.plasma.panelspacer");
 lead.currentConfigGroup = ["General"];
@@ -44,6 +45,7 @@ dock.floating = true;
 dock.alignment = "center";
 dock.lengthMode = "fit";
 dock.hiding = "dodgewindows";
+dock.opacity = "translucent";
 var tasks = dock.addWidget("org.kde.plasma.icontasks");
 tasks.currentConfigGroup = ["General"];
 tasks.writeConfig("launchers", [%LAUNCHERS%]);
@@ -54,6 +56,54 @@ dock.addWidget("org.kde.plasma.marginsseparator");
 var kick = dock.addWidget("org.kde.plasma.kickoff");
 kick.currentConfigGroup = ["General"];
 kick.writeConfig("icon", "view-app-grid-symbolic");
+
+var desktopsArray = desktopsForActivity(currentActivity());
+for (var j = 0; j < desktopsArray.length; j++) {
+    desktopsArray[j].wallpaperPlugin = "org.kde.image";
+}
+"""
+
+
+LAYOUT_RAIL = """// oneDesign: left rail, glass strip flush to the screen edge
+var screenGeo = screenGeometry(0);
+
+var rail = new Panel;
+rail.location = "left";
+rail.height = 68;
+rail.floating = false;
+// Inset with rounded inner corners; the rail widget switches to full height while a window is maximized
+rail.lengthMode = "custom";
+rail.alignment = "center";
+rail.minimumLength = screenGeo.height - 32;
+rail.maximumLength = screenGeo.height - 32;
+rail.hiding = "none";
+// Glass at all times: the default "adaptive" mode turns the panel opaque as soon as a window gets near it
+rail.opacity = "translucent";
+var drawer = rail.addWidget("org.onedesign.drawer");
+drawer.currentConfigGroup = ["General"];
+drawer.writeConfig("launchers", [%LAUNCHERS%]);
+var one = rail.addWidget("org.onedesign.rail");
+one.currentConfigGroup = ["General"];
+one.writeConfig("launchers", [%LAUNCHERS%]);
+var tray = rail.addWidget("org.kde.plasma.systemtray");
+var trayBox = desktopById(tray.readConfig("SystrayContainmentId")) || tray;
+{
+    trayBox.currentConfigGroup = ["General"];
+    trayBox.writeConfig("knownItems", [%TRAY_KNOWN%]);
+    // The stock notifications applet draws the toasts, so it stays loaded in the tray, out of sight
+    trayBox.writeConfig("extraItems", [%TRAY_KEEP%, "org.kde.plasma.notifications"]);
+    // Everything lives behind the tray's chevron. `one-theme apply` fills in the status notifier items
+    // that are running (their ids are not known ahead of time); the next line is replaced then.
+    var trayHiddenExtra = [];
+    trayBox.writeConfig("hiddenItems", ["org.kde.plasma.notifications", "org.kde.plasma.clipboard"].concat(trayHiddenExtra));
+    trayBox.writeConfig("showAllItems", false);
+    // Fixed icons with more air between them (the default packs them tightly in two columns)
+    trayBox.writeConfig("iconSpacing", 4);
+    trayBox.writeConfig("scaleIconsToFit", false);
+}
+rail.addWidget("org.onedesign.quicksettings");
+rail.addWidget("org.onedesign.clock");
+rail.addWidget("org.onedesign.notifications");
 
 var desktopsArray = desktopsForActivity(currentActivity());
 for (var j = 0; j < desktopsArray.length; j++) {
@@ -179,7 +229,7 @@ ColorScheme={'OneDark' if dark else 'OneLight'}
 Theme={'One-Dark' if dark else 'One'}
 
 [plasmarc][Theme]
-name=One
+name={'OneDark' if dark else 'One'}
 
 [Wallpaper]
 Image={wallpaper}
@@ -196,7 +246,7 @@ Theme={ident(dark)}
 """
 
 
-def build(th, wallpaper="One-Lagoon"):
+def build(th, wallpaper="One-Lagoon", shell="bar"):
     """Returns {relative path: text} for share/plasma/look-and-feel/<ident>/."""
     c = th.c
     launchers = ", ".join(f'"{x}"' for x in LAUNCHERS)
@@ -205,7 +255,7 @@ def build(th, wallpaper="One-Lagoon"):
     return {
         "metadata.json": metadata(th.dark),
         "contents/defaults": defaults(th, wallpaper),
-        "contents/layouts/org.kde.plasma.desktop-layout.js": LAYOUT.replace("%LAUNCHERS%", launchers)
+        "contents/layouts/org.kde.plasma.desktop-layout.js": (LAYOUT_RAIL if shell == "rail" else LAYOUT).replace("%LAUNCHERS%", launchers)
             .replace("%TRAY_KNOWN%", ", ".join(f'"{x}"' for x in TRAY_KEEP + TRAY_HIDE))
             .replace("%TRAY_KEEP%", ", ".join(f'"{x}"' for x in TRAY_KEEP)),
         "contents/splash/Splash.qml": splash,

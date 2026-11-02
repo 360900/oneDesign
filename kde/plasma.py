@@ -192,23 +192,42 @@ def _row(pos):
 SHEEN = 0.07
 
 
-def glass_layers(r, alpha, rim=True):
-    """Floating glass: tinted fill, light sheen fading down, hairline, specular rim lit from above."""
-    L = [(0, r, cs("Background", alpha), "fill")]
+def glass_layers(r, alpha, rim=True, g=None):
+    """Floating glass. With `g` (glass tokens for one mode) the layers mirror the CSS material:
+    luminosity layer, surface tint with an accent cast, crisp outer edge, uniform inner line and
+    a specular rim lit from above. Without it: the older flat fill (solid and opaque variants)."""
+    if g is None:
+        L = [(0, r, cs("Background", alpha), "fill")]
+        if rim:
+            L.append((0, r, lambda p: {"top": cs("#ffffff", SHEEN), "mid": 'fill="url(#sheen)"'}.get(_row(p), 'fill="none"'), "fill"))
+        L.append((0, r, cs("#000000", 0.14), ("stroke", 1)))
+        if rim:
+            L.append((1, r - 1, lambda p: cs("#ffffff", {"top": 0.38, "mid": 0.07, "bottom": 0.03}[_row(p)]), ("stroke", 1)))
+        return L
+    m = "dark" if g["_dark"] else "light"
+    lum, tint, acc = g["lum"][m], g["tint"][m], g["accentMix"][m]
+    spec, line, edge = g["specular"][m], g["line"][m], g["edge"][m]
+    # KWin cannot shift backdrop brightness reliably, so bake it in as a flat layer under the rest
+    br = g["brightness"][m]
+    L = [(0, r, cs("#ffffff" if br > 1 else "#000000", min(abs(1 - br), 0.6)), "fill"),
+         (0, r, cs("#000000" if g["_dark"] else "#ffffff", lum), "fill"),
+         (0, r, cs("Background", tint * (1 - acc)), "fill"),
+         (0, r, cs("Highlight", tint * acc), "fill")]
     if rim:
         L.append((0, r, lambda p: {"top": cs("#ffffff", SHEEN), "mid": 'fill="url(#sheen)"'}.get(_row(p), 'fill="none"'), "fill"))
-    L.append((0, r, cs("#000000", 0.14), ("stroke", 1)))
+    L.append((0, r, cs("#000000", edge), ("stroke", 1)))
+    L.append((1, r - 1, cs("#ffffff", line), ("stroke", 1)))
     if rim:
-        L.append((1, r - 1, lambda p: cs("#ffffff", {"top": 0.38, "mid": 0.07, "bottom": 0.03}[_row(p)]), ("stroke", 1)))
+        L.append((1, r - 1, lambda p: cs("#ffffff", spec * {"top": 0.9, "mid": 0.18, "bottom": 0.5}[_row(p)]), ("stroke", 1)))
     return L
 
 
-def surface_svg(r, alpha, pad, S=32, with_shadow=True, shadow_layers=None, thick=False):
+def surface_svg(r, alpha, pad, S=32, with_shadow=True, shadow_layers=None, thick=False, g=None):
     d = Doc()
     d.defs.append(f'<linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="{SHEEN}"/>'
                   '<stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>')
     B = max(r, 4)
-    frame(d, "", B, glass_layers(r, alpha), pad)
+    frame(d, "", B, glass_layers(r, alpha, g=g), pad)
     d.hint("hint-stretch-borders", 4, 4)
     for s in SIDES:
         d.hint(f"hint-{s}-inset", 4 if s in ("top", "bottom") else 0.01, 0.01 if s in ("top", "bottom") else 4)
@@ -311,7 +330,7 @@ def dot_frame(doc, prefix, dw, paint, side="south", W=TASK_W, t=4):
         doc.add(f"{prefix}-{pos}", w, h, body.get(pos, ""))
 
 
-def tasks_svg(r):
+def tasks_svg(r, dark=False):
     """Dock task buttons: no tile behind open apps, only a centered indicator
     (short dot when running, wider accent bar for the active window). Hover keeps
     a soft tile as pointer feedback."""
@@ -326,7 +345,7 @@ def tasks_svg(r):
     for loc, side in sides.items():
         for st, (dw, paint) in indicators.items():
             dot_frame(d, f"{loc}{st}", dw, paint, side)
-        frame(d, f"{loc}hover", r, [(0, r, cs("Text", 0.08), "fill")])
+        frame(d, f"{loc}hover", r, [(0, r, cs("#ffffff", 0.17 if dark else 0.8), "fill")])
         frame(d, f"{loc}progress", r, [(0, r, cs("Highlight", 0.22), "fill")])
     for s in SIDES:
         d.hint(f"normal-hint-{s}-margin", 4, 4)
@@ -353,12 +372,12 @@ def inset_frame(doc, prefix, r, ix, iy, paint, C=4):
 
 
 def tabbar_svg(r, inset):
-    """Expanded-applet highlight. Plasma stretches it across the panel thickness
-    (and for tray items across the side margins), so inset it on the thickness axis."""
+    """Plasma stretches this frame behind an expanded or pressed applet, ignoring the applet's own
+    shape. It is left empty: the rail's widgets draw their own highlight."""
     d = Doc()
     for loc in ("north", "south", "east", "west"):
         ix, iy = (0, inset) if loc in ("north", "south") else (inset, 0)
-        inset_frame(d, f"{loc}-active-tab", r, ix, iy, cs("Text", 0.10))
+        inset_frame(d, f"{loc}-active-tab", r, ix, iy, 'fill="none"')
     return d.text()
 
 
@@ -394,9 +413,9 @@ enabled=true
 
 [ContrastEffect]
 enabled=true
-contrast=0.2
-intensity=1.2
-saturation=1.4
+contrast=1
+intensity=%INTENSITY%
+saturation=%SATURATION%
 
 [BlurBehindEffect]
 enabled=true
@@ -414,28 +433,32 @@ def build(th, ident="One"):
     a_glass = 0.45
     files = {}
 
-    panel = lambda alpha, sh_=True: surface_svg(rc, alpha, PANEL_PAD, S=24, with_shadow=sh_,
-                                                shadow_layers=((0.06, 1, 3), (0.16, 6, 18)), thick=True)
-    dialog = lambda alpha, sh_=True: surface_svg(rc, alpha, 10, S=40, with_shadow=sh_,
-                                                 shadow_layers=((0.06, 1, 2), (0.14, 10, 30)))
-    tooltip = lambda alpha, sh_=True: surface_svg(rctl, alpha, 8, S=24, with_shadow=sh_,
-                                                  shadow_layers=((0.06, 1, 2), (0.16, 6, 14)))
-    widget = lambda alpha, sh_=True: surface_svg(rw, alpha, 14, S=32, with_shadow=sh_,
-                                                 shadow_layers=((0.05, 1, 3), (0.12, 8, 22)))
+    gl = dict(th.tokens["glass"], _dark=th.dark)
+    panel = lambda alpha, sh_=True, g=None: surface_svg(rc, alpha, PANEL_PAD, S=24, with_shadow=sh_, g=g,
+                                                        shadow_layers=((0.06, 1, 3), (0.16, 6, 18)), thick=True)
+    dialog = lambda alpha, sh_=True, g=None: surface_svg(rc, alpha, 10, S=40, with_shadow=sh_, g=g,
+                                                         shadow_layers=((0.06, 1, 2), (0.14, 10, 30)))
+    tooltip = lambda alpha, sh_=True, g=None: surface_svg(rctl, alpha, 8, S=24, with_shadow=sh_, g=g,
+                                                          shadow_layers=((0.06, 1, 2), (0.16, 6, 14)))
+    widget = lambda alpha, sh_=True, g=None: surface_svg(rw, alpha, 14, S=32, with_shadow=sh_, g=g,
+                                                         shadow_layers=((0.05, 1, 3), (0.12, 8, 22)))
 
     for sub, alpha, sh_ in (("", 0.96, True), ("translucent/", a_glass, True), ("solid/", 1.0, True), ("opaque/", 1.0, False)):
-        files[f"{sub}widgets/panel-background.svg"] = panel(alpha, sh_)
-        files[f"{sub}dialogs/background.svg"] = dialog(alpha, sh_)
-        files[f"{sub}widgets/tooltip.svg"] = tooltip(alpha, sh_)
+        g = gl if sub == "translucent/" else None
+        files[f"{sub}widgets/panel-background.svg"] = panel(alpha, sh_, g)
+        files[f"{sub}dialogs/background.svg"] = dialog(alpha, sh_, g)
+        files[f"{sub}widgets/tooltip.svg"] = tooltip(alpha, sh_, g)
         if sub != "opaque/":
-            files[f"{sub}widgets/background.svg"] = widget(alpha, sh_)
+            files[f"{sub}widgets/background.svg"] = widget(alpha, sh_, g)
     files["widgets/button.svg"] = button_svg(rctl)
     files["widgets/lineedit.svg"] = lineedit_svg(rctl)
     files["widgets/viewitem.svg"] = viewitem_svg(sh["small"] + 2)
     files["widgets/listitem.svg"] = listitem_svg(sh["small"] + 2)
-    files["widgets/tasks.svg"] = tasks_svg(rctl)
+    files["widgets/tasks.svg"] = tasks_svg(12, th.dark)
     files["widgets/tabbar.svg"] = tabbar_svg(sh["small"] + 2, 5)
     files["widgets/plasmoidheading.svg"] = heading_svg()
-    files["metadata.json"] = metadata("One", ident, "oneDesign Plasma style")
-    files["plasmarc"] = PLASMARC
+    files["metadata.json"] = metadata("One" if ident == "One" else "One Dark", ident, "oneDesign Plasma style")
+    m = "dark" if th.dark else "light"
+    files["plasmarc"] = (PLASMARC.replace("%INTENSITY%", "1")
+                         .replace("%SATURATION%", str(th.tokens["glass"]["saturate"])))
     return files

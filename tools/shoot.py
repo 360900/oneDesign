@@ -36,7 +36,7 @@ def shoot(port, out, scene, mode, wall, accent, scale):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--scene", default="desktop,settings,login,components,apps")
+    p.add_argument("--scene", default="desktop,settings,login,components,apps,rail,rail-open,edge")
     p.add_argument("--mode", default="light,dark")
     p.add_argument("--wall", default="lagoon")
     p.add_argument("--accent", default="wallpaper")

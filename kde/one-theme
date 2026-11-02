@@ -10,6 +10,7 @@
 """
 import argparse
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -81,7 +82,7 @@ def freecad_dirs():
 
 
 def cmd_build(a):
-    args = [sys.executable, str(HERE / "build.py"), "--accent", a.accent, "--wall", a.wall]
+    args = [sys.executable, str(HERE / "build.py"), "--accent", a.accent, "--wall", a.wall, "--shell", a.shell]
     run(*args)
 
 
@@ -147,12 +148,74 @@ def apply_gtk():
         p.write_text((old + "\n" if old else "") + css)
 
 
+def detect_tray_ids():
+    """Ids of the status notifier (tray) items running right now, so the rail can keep them behind
+    the tray chevron. Empty when there is no session bus or no watcher."""
+    if not shutil.which("qdbus6"):
+        return []
+    r = subprocess.run(["qdbus6", "org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher",
+                        "org.kde.StatusNotifierWatcher.RegisteredStatusNotifierItems"],
+                       capture_output=True, text=True)
+    ids = []
+    for entry in r.stdout.split():
+        service, _, path = entry.partition("/")
+        if not service:
+            continue
+        q = subprocess.run(["qdbus6", service, "/" + path if path else "/StatusNotifierItem", "org.kde.StatusNotifierItem.Id"],
+                           capture_output=True, text=True)
+        ident = q.stdout.strip()
+        if q.returncode == 0 and ident and ident not in ids:
+            ids.append(ident)
+    return ids
+
+
+def hide_running_tray_items(m):
+    """Put the running tray items into the installed rail layouts' hidden list."""
+    ids = detect_tray_ids()
+    line = "var trayHiddenExtra = " + json.dumps(ids) + ";"
+    for lf in m["lookandfeel"].values():
+        js = DATA / "plasma/look-and-feel" / lf / "contents/layouts/org.kde.plasma.desktop-layout.js"
+        if not js.exists() or "var trayHiddenExtra" not in js.read_text():
+            continue
+        js.write_text(re.sub(r"var trayHiddenExtra = \[.*?\];", lambda _: line, js.read_text()))
+    if ids:
+        print("tray items kept behind the chevron:", ", ".join(ids))
+
+
+def reset_layout_live(lf):
+    """Rebuild the panels in the running shell from the installed layout script.
+    plasma-apply-lookandfeel does nothing when the same theme is already active, so do it directly."""
+    js = DATA / "plasma/look-and-feel" / lf / "contents/layouts/org.kde.plasma.desktop-layout.js"
+    if not js.exists() or not shutil.which("qdbus6"):
+        return
+    script = ("var old = panels(); for (var i = 0; i < old.length; i++) { old[i].remove(); }\n" + js.read_text())
+    print("+ qdbus6 org.kde.plasmashell /PlasmaShell evaluateScript <layout>")
+    subprocess.run(["qdbus6", "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript", script],
+                   check=False, stdout=subprocess.DEVNULL)
+
+
+def restart_shell():
+    """Plasmoid QML is only read when the shell starts."""
+    import time
+    time.sleep(3)  # let the shell write the new layout out first
+    if shutil.which("systemctl") and subprocess.run(["systemctl", "--user", "is-active", "--quiet", "plasma-plasmashell.service"]).returncode == 0:
+        run("systemctl", "--user", "restart", "plasma-plasmashell.service", check=False)
+    elif shutil.which("kquitapp6") and shutil.which("kstart"):
+        run("kquitapp6", "plasmashell", check=False)
+        time.sleep(1)
+        subprocess.Popen(["kstart", "plasmashell"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    else:
+        print("restart plasmashell yourself: kquitapp6 plasmashell; kstart plasmashell")
+
+
 def cmd_apply(a):
     m = manifest()
     if a.mode is None:
         current = kread("kdeglobals", "KDE", "LookAndFeelPackage")
         a.mode = "dark" if current == m["lookandfeel"]["dark"] else "light"
     backup()
+    if a.layout:
+        hide_running_tray_items(m)
     dark = a.mode == "dark"
     lf = m["lookandfeel"]["dark" if dark else "light"]
     scheme = "OneDark" if dark else "OneLight"
@@ -161,6 +224,8 @@ def cmd_apply(a):
         if a.layout:
             args.append("--resetLayout")
         run(*args)
+        if a.layout:
+            reset_layout_live(lf)
     else:
         defaults = (DATA / "plasma/look-and-feel" / lf / "contents/defaults").read_text()
         group = None
@@ -191,8 +256,10 @@ def cmd_apply(a):
     kwrite("kwinrc", "org.kde.kdecoration2", "BorderSizeAuto", "false")
     kwrite("kwinrc", "Plugins", "blurEnabled", "true")
     kwrite("kwinrc", "Plugins", "contrastEnabled", "true")
-    kwrite("kwinrc", "Effect-blur", "BlurStrength", "15")
-    kwrite("kwinrc", "Effect-blur", "NoiseStrength", "2")
+    kwrite("kwinrc", "Effect-blur", "BlurStrength", str(m["kwin"]["blurStrength"]))
+    kwrite("kwinrc", "Effect-blur", "NoiseStrength", str(m["kwin"]["noiseStrength"]))
+    # Super alone opens the launcher (the One drawer provides it)
+    kwrite("kwinrc", "ModifierOnlyShortcuts", "Meta", "org.kde.plasmashell,/PlasmaShell,org.kde.PlasmaShell,activateLauncherMenu")
     kwrite("konsolerc", "Desktop Entry", "DefaultProfile", f"{scheme}.profile")
     kwrite("konsolerc", "LightDarkTheme", "SyncProfileWithSystemTheme", "true")
     kwrite("konsolerc", "LightDarkTheme", "LightThemeProfile", "OneLight")
@@ -204,6 +271,7 @@ def cmd_apply(a):
             run("plasma-apply-wallpaperimage", str(wall), check=False)
         if shutil.which("qdbus6"):
             run("qdbus6", "org.kde.KWin", "/KWin", "reconfigure", check=False)
+        restart_shell()
     print(f"applied {lf}. Log out and back in for fonts and Qt style to reach every app.")
 
 
@@ -306,6 +374,7 @@ def main():
     b = sub.add_parser("build")
     b.add_argument("--accent", default="blue")
     b.add_argument("--wall", default="lagoon")
+    b.add_argument("--shell", default="bar", choices=("bar", "rail"), help="panel layout: top bar + dock, or left rail")
     sub.add_parser("install")
     p = sub.add_parser("apply")
     p.add_argument("--mode", choices=("light", "dark", "auto"), default=None,

@@ -44,10 +44,10 @@ body:not([data-ready]) { visibility: hidden; }
    a thin colour layer from the surface tint, and fine grain so it reads as a material. */
 .mat-glass {
   background-color: rgb(var(--g-lum-ink) / var(--g-lum));
-  background-image: var(--g-noise), linear-gradient(color-mix(in oklab, var(--bg) var(--g-tint), transparent) 0 0);
+  background-image: var(--g-noise), linear-gradient(color-mix(in oklab, color-mix(in oklab, var(--c-accent) var(--g-accent), var(--bg)) var(--g-tint), transparent) 0 0);
   -webkit-backdrop-filter: blur(var(--g-blur)) saturate(var(--g-sat)) brightness(var(--g-bright));
   backdrop-filter: blur(var(--g-blur)) saturate(var(--g-sat)) brightness(var(--g-bright));
-  box-shadow: var(--shadow-float), 0 0 0 .5px rgb(0 0 0 / var(--g-edge));
+  box-shadow: var(--shadow-float), 0 0 0 1px rgb(0 0 0 / var(--g-edge));
   /* vibrant fills: controls inside glass lift towards white instead of darkening */
   --c-fill: rgb(255 255 255 / var(--v-fill));
   --c-fill-strong: rgb(255 255 255 / var(--v-fill-strong));
@@ -61,7 +61,7 @@ body:not([data-ready]) { visibility: hidden; }
   background: linear-gradient(165deg,
     rgb(255 255 255 / calc(var(--g-spec) * .9)) 0%,
     rgb(255 255 255 / calc(var(--g-spec) * .2)) 22%,
-    rgb(255 255 255 / 0) 50%,
+    rgb(255 255 255 / calc(var(--g-spec) * .18)) 50%,
     rgb(255 255 255 / calc(var(--g-spec) * .1)) 78%,
     rgb(255 255 255 / calc(var(--g-spec) * .5)) 100%);
   -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
@@ -70,7 +70,7 @@ body:not([data-ready]) { visibility: hidden; }
 /* crisp top highlight: the edge of the pane catching light */
 .mat-glass::after {
   content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 2;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / var(--g-hl)), inset 0 0 0 .5px rgb(255 255 255 / calc(var(--g-hl) * .35));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / var(--g-hl)), inset 0 0 0 1px rgb(255 255 255 / var(--g-line));
 }
 .mat-glass > * { position: relative; z-index: 1; }
 
@@ -286,3 +286,51 @@ body:not([data-ready]) { visibility: hidden; }
 .pathbar .crumb.cur { font-weight: 700; }
 .pathbar .ic.sep { width: 12px; height: 12px; color: var(--c-text3); }
 .statusbar { height: 34px; flex: none; display: flex; align-items: center; padding: 0 16px; gap: 12px; font-size: var(--fs-caption); color: var(--c-text2); }
+
+/* ---------- edge-docked shells (rail, rail-open, edge) ---------- */
+.rail { position: absolute; left: 0; top: 0; bottom: 0; width: 68px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 0; border-radius: 0 calc(var(--r-container) + 10px) calc(var(--r-container) + 10px) 0; z-index: 50; box-shadow: var(--shadow-float), 1px 0 0 rgb(0 0 0 / var(--g-edge)); }
+.rail::before, .rail::after { border-radius: inherit; }
+.rail .appicon { width: 40px; height: 40px; border-radius: 12px; }
+.rail .run::before { content: ""; position: absolute; left: -14px; top: 50%; height: 16px; width: 4px; margin-top: -8px; border-radius: 0 4px 4px 0; background: var(--c-accent); }
+.rail .run.cur::before { height: 28px; margin-top: -14px; }
+.rail .sep { width: 28px; height: 1px; background: var(--c-stroke-strong); margin: 4px 0; flex: none; }
+.rail .wsl { display: flex; flex-direction: column; gap: 8px; align-items: center; flex: none; }
+/* thumbnail: the wallpaper at 16:10 with miniature windows, number tag, accent ring when current */
+.rail .wsm { width: 48px; height: 30px; border-radius: 7px; position: relative; overflow: hidden; flex: none;
+  background: var(--wallpaper) center / cover, var(--c-desktop); box-shadow: 0 0 0 1px rgb(0 0 0 / .22), inset 0 0 0 1px rgb(255 255 255 / .25); opacity: .72; }
+.rail .wsm b { position: absolute; border-radius: 2px; background: var(--c-canvas); box-shadow: 0 1px 2px rgb(0 0 0 / .35), 0 0 0 .5px rgb(0 0 0 / .25); overflow: hidden; }
+.rail .wsm b::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--c-headerbar); box-shadow: 0 .5px 0 rgb(var(--ink) / .12); }
+.rail .wsm b::after { content: ""; position: absolute; left: 2px; right: 2px; top: 6px; bottom: 2px; background: repeating-linear-gradient(rgb(var(--ink) / .22) 0 1px, transparent 1px 3px); }
+.rail .wsm b.side::after { right: 55%; background: rgb(var(--ink) / .12); top: 3px; left: 0; }
+.rail .wsm u { position: absolute; left: 3px; bottom: 2px; z-index: 2; font: 700 8px/8px var(--font-ui); text-decoration: none; color: #fff; text-shadow: 0 0 3px rgb(0 0 0 / .7); }
+.rail .wsm:hover { opacity: 1; }
+.rail .wsm.cur { opacity: 1; box-shadow: 0 0 0 2px var(--c-accent), 0 0 0 3.5px rgb(255 255 255 / .4); }
+.rail .wsm.empty { background: rgb(var(--ink) / .08); box-shadow: inset 0 0 0 1px rgb(var(--ink) / .3); opacity: 1; }
+.rail .wsm.empty::after { content: "+"; position: absolute; inset: 0; display: grid; place-items: center; font-size: 15px; font-weight: 500; color: var(--c-text2); }
+.rail .tray { display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 8px 0; color: var(--c-text); }
+.rail .clock { font-weight: 650; font-size: 15px; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums; }
+.rail .clock small { display: block; font-size: 11px; font-weight: 500; color: var(--c-text2); margin-top: 4px; }
+.rail .rbtn { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--c-fill); flex: none; }
+
+.rail.open { width: 264px; align-items: stretch; padding: 12px; gap: 2px; }
+.rail.open .side-item { padding: 0 10px; gap: 12px; }
+.rail.open .side-item .ic { color: var(--c-text); }
+.rail.open .side-item.active { background: var(--c-fill-strong); color: var(--c-text); }
+.rail.open .side-item.active::before { content: ""; position: absolute; left: -12px; top: 8px; bottom: 8px; width: 4px; border-radius: 0 4px 4px 0; background: var(--c-accent); }
+.rail.open .appicon { width: 24px; height: 24px; border-radius: 7px; }
+.rail.open .side-label { color: var(--c-text2); }
+.rail.open .entry { background: var(--c-fill); }
+.rail.open .user { display: flex; align-items: center; gap: 10px; padding: 8px 6px 0; border-top: 1px solid var(--c-stroke-strong); margin-top: 8px; }
+.rail.open .user .tray-row { display: flex; gap: 10px; margin-left: auto; color: var(--c-text2); }
+
+.edgebar { position: absolute; top: 0; left: 0; right: 0; height: 34px; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 0; font-weight: 600; font-size: 13px; z-index: 50; box-shadow: 0 1px 0 rgb(0 0 0 / var(--g-edge)), var(--shadow-2); }
+.edgebar::before, .edgebar::after { border-radius: 0; }
+.edgebar .seg { height: 24px; padding: 0 10px; border-radius: 7px; display: inline-flex; align-items: center; gap: 8px; }
+.edgebar .seg.on { background: var(--c-fill-strong); }
+.edgebar .num { min-width: 24px; padding: 0 6px; justify-content: center; font-variant-numeric: tabular-nums; color: var(--c-text2); }
+.edgebar .num.cur { color: var(--c-text); background: var(--c-accent); color: #fff; }
+.edgebar .task { height: 26px; padding: 0 10px 0 6px; border-radius: 7px; display: inline-flex; align-items: center; gap: 8px; font-weight: 500; position: relative; }
+.edgebar .task .appicon { width: 18px; height: 18px; border-radius: 5px; }
+.edgebar .task.cur { background: var(--c-fill-strong); font-weight: 600; }
+.edgebar .task.cur::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -4px; height: 2px; border-radius: 2px; background: var(--c-accent); }
+.edgebar .vsep { width: 1px; height: 16px; background: var(--c-stroke-strong); margin: 0 6px; }

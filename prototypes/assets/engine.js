@@ -78,6 +78,8 @@
     v["--g-spec"] = g.specular[mode];
     v["--g-hl"] = g.highlight[mode];
     v["--g-edge"] = g.edge[mode];
+    v["--g-line"] = g.line[mode];
+    v["--g-accent"] = Math.round(g.accentMix[mode] * 100) + "%";
     v["--g-rim"] = g.rim + "px";
     v["--g-noise"] = noise(g.noise);
     v["--v-fill"] = dark ? 0.1 : 0.5;

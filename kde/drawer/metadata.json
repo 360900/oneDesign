@@ -1,0 +1,15 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "oneDesign" }],
+        "Category": "Application Launchers",
+        "Description": "Full-height drawer: search, running and pinned apps",
+        "Icon": "view-app-grid-symbolic",
+        "Id": "org.onedesign.drawer",
+        "License": "GPL-2.0-or-later",
+        "Name": "One Drawer",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-Provides": ["org.kde.plasma.launchermenu"]
+}

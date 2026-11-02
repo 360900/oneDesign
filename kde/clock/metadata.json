@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [{ "Name": "oneDesign" }],
+        "Category": "Date and Time",
+        "Description": "Hours over minutes, with the date, for the One rail",
+        "Icon": "clock",
+        "Id": "org.onedesign.clock",
+        "License": "GPL-2.0-or-later",
+        "Name": "One Clock",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

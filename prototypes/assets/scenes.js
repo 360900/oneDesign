@@ -105,6 +105,75 @@
     </div>`;
   };
 
+
+  /* ---------------- edge-docked shells ---------------- */
+  const appList = [["files", "folder", "Files", 1], ["web", "computer", "Web", 1], ["mail", "mail", "Mail"], ["music", "volume", "Music"], ["photos", "image", "Photos"], ["text", "file", "Text Editor", 1], ["term", null, "Terminal"], ["settings", "settings", "Settings"]];
+  const aic = ([k, ic], cls = "") => `<div class="appicon ${k} ${cls}">${ic ? I(ic) : `<span class="glyph">&gt;_</span>`}</div>`;
+
+  function railShell() {
+    const apps = appList.map((a, i) => aic(a, a[3] ? (i === 0 ? "run cur" : "run") : "")).join("");
+    return `<nav class="rail mat-glass" data-role="shell">
+      <div class="rbtn">${I("grid")}</div>
+      <div class="wsl">
+        <div class="wsm cur"><b class="side" style="left:4px;top:5px;width:26px;height:19px"></b><b style="left:22px;top:10px;width:22px;height:16px"></b><u>1</u></div>
+        <div class="wsm"><b style="left:5px;top:4px;width:38px;height:22px"></b><u>2</u></div>
+        <div class="wsm"><b style="left:3px;top:6px;width:20px;height:18px"></b><b style="left:25px;top:4px;width:20px;height:14px"></b><u>3</u></div>
+        <div class="wsm empty"></div>
+      </div>
+      <div class="sep"></div>
+      ${apps}
+      <div class="sep"></div>
+      ${aic(["store", "add"])}
+      <div class="spacer"></div>
+      <div class="tray">${I("wifi")}${I("volume")}${I("battery")}</div>
+      <div class="clock">15<br>42<small>31 Oct</small></div>
+      <div class="rbtn">${I("power")}</div>
+    </nav>`;
+  }
+
+  function railOpenShell() {
+    const row = (a, i) => `<div class="side-item ${i === 0 ? "active" : ""}">${aic(a)}<span>${a[2]}</span>${a[3] ? `<span class="spacer"></span><span class="dim caption">${i === 0 ? "3 windows" : ""}</span>` : ""}</div>`;
+    const running = appList.filter((a) => a[3]);
+    const pinned = appList.filter((a) => !a[3]);
+    return `<nav class="rail open mat-glass" data-role="shell">
+      <div class="entry pill" style="margin-bottom:6px">${I("search")}<span class="dim">Search apps and files</span></div>
+      <div class="side-label">Running</div>
+      ${running.map(row).join("")}
+      <div class="side-label">Pinned</div>
+      ${pinned.map((a) => row(a, 9)).join("")}
+      <div class="spacer"></div>
+      <div class="user"><div class="avatar photo"></div><div class="grow"><div style="font-weight:650">Tarik</div><div class="caption muted">87% · 15:42</div></div><div class="tray-row">${I("wifi")}${I("volume")}${I("power")}</div></div>
+    </nav>`;
+  }
+
+  function edgeShell() {
+    const tasks = [["files", "folder", "Files"], ["text", "file", "notes.md"], ["web", "computer", "Web"]]
+      .map((a, i) => `<span class="task ${i === 0 ? "cur" : ""}">${aic(a)}${i === 0 ? `<span>${a[2]}</span>` : ""}</span>`).join("");
+    return `<div class="edgebar mat-glass" data-role="shell">
+      <span class="seg on">${I("grid")}Activities</span>
+      <span class="seg num cur">1</span><span class="seg num">2</span><span class="seg num">3</span>
+      <span class="vsep"></span>${tasks}
+      <span class="spacer"></span>
+      <span class="seg">${I("wifi")}${I("volume")}${I("battery")}</span>
+      <span class="seg on">Sat 31 Oct  15:42</span>
+    </div>`;
+  }
+
+  scenes.rail = () => `<div class="desktop">
+      ${filesWindow("left:120px;top:70px;width:920px;height:620px")}
+      ${railShell()}
+      ${quickSettings("bottom:14px;left:80px")}
+    </div>`;
+  scenes["rail-open"] = () => `<div class="desktop">
+      ${filesWindow("left:312px;top:70px;width:920px;height:620px", true)}
+      ${railOpenShell()}
+    </div>`;
+  scenes.edge = () => `<div class="desktop">
+      ${filesWindow("left:70px;top:70px;width:920px;height:620px")}
+      ${edgeShell()}
+      ${notification("top:48px;right:14px")}
+    </div>`;
+
   scenes.settings = () => {
     const items = [
       sideItem("wifi", "Wi-Fi"), sideItem("bluetooth", "Bluetooth"), sideItem("computer", "Displays"),

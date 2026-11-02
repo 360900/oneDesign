@@ -5,6 +5,15 @@ accent that tints everything; concentric rounded geometry; depth from hairlines 
 soft shadows. Themes KDE Plasma, Qt and GTK apps, window decorations, icons, and the
 lock and login screens.
 
+## Install on KDE Plasma
+
+```sh
+git clone --depth 1 https://github.com/360900/oneDesign.git ~/.local/share/oneDesign && cd ~/.local/share/oneDesign && kde/one-theme build && kde/one-theme install && kde/one-theme apply --layout --live
+```
+
+Needs Plasma 6, `kvantum`, `aurorae`, `papirus-icon-theme`, Python 3 with Pillow and numpy.
+`kde/one-theme restore` undoes the apply. Options and login screen: `docs/kde.md`.
+
 ## View
 
 ```sh

@@ -1,6 +1,8 @@
 import QtQuick
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.kde.plasma.plasmoid
+import org.kde.plasma.core as PlasmaCore
 
 MouseArea {
     id: compact
@@ -17,8 +19,14 @@ MouseArea {
         return list.length ? list : ["emblem-system-symbolic"];
     }
 
-    Layout.minimumWidth: row.implicitWidth + Kirigami.Units.largeSpacing * 2
-    Layout.preferredWidth: Layout.minimumWidth
+    // On a vertical panel (the rail) the icons stack instead of sitting in a row
+    readonly property bool vertical: Plasmoid.formFactor === PlasmaCore.Types.Vertical
+        || Plasmoid.location === PlasmaCore.Types.LeftEdge || Plasmoid.location === PlasmaCore.Types.RightEdge
+
+    Layout.minimumWidth: vertical ? 0 : row.implicitWidth + Kirigami.Units.largeSpacing * 2
+    Layout.preferredWidth: vertical ? 0 : Layout.minimumWidth
+    Layout.minimumHeight: vertical ? col.implicitHeight + Kirigami.Units.largeSpacing * 2 : 0
+    Layout.preferredHeight: vertical ? Layout.minimumHeight : -1
     hoverEnabled: true
     acceptedButtons: Qt.LeftButton
     onClicked: root.expanded = !root.expanded
@@ -28,18 +36,27 @@ MouseArea {
         root.audio.setPercent(Math.max(0, Math.min(100, root.audio.percent + step)));
     }
 
+    readonly property bool dark: Kirigami.Theme.textColor.hsvValue > 0.5
+    readonly property color accent: Kirigami.Theme.highlightColor
+    readonly property color hoverFill: dark ? Qt.rgba(1, 1, 1, 0.13) : Qt.rgba(0.2, 0.28, 0.4, 0.2)
+
+    // One highlight for every control on the rail: same shape, white over glass; pressed only changes the color
     Rectangle {
-        anchors.fill: parent
-        anchors.topMargin: Math.max(0, (parent.height - Kirigami.Units.gridUnit * 1.6) / 2)
-        anchors.bottomMargin: anchors.topMargin
-        radius: height / 2
-        color: Kirigami.Theme.textColor
-        opacity: root.expanded ? 0.14 : compact.containsMouse ? 0.08 : 0
-        Behavior on opacity { NumberAnimation { duration: 120 } }
+        anchors.centerIn: parent
+        width: compact.vertical ? 44 : parent.width
+        height: compact.vertical ? Math.min(parent.height, col.implicitHeight + 16) : Math.min(parent.height, Kirigami.Units.gridUnit * 1.6)
+        radius: compact.vertical ? 12 : height / 2
+        color: root.expanded || compact.pressed ? Qt.tint(compact.hoverFill, Qt.rgba(compact.accent.r, compact.accent.g, compact.accent.b, compact.dark ? 0.45 : 0.30))
+             : compact.containsMouse ? compact.hoverFill
+             : Qt.rgba(compact.hoverFill.r, compact.hoverFill.g, compact.hoverFill.b, 0) // same hue, so the fade does not pass through grey
+        border.width: compact.containsMouse || root.expanded || compact.pressed ? 1 : 0
+        border.color: Qt.rgba(1, 1, 1, compact.dark ? 0.12 : 0.6)
+        Behavior on color { ColorAnimation { duration: 100 } }
     }
 
     RowLayout {
         id: row
+        visible: !compact.vertical
         anchors.centerIn: parent
         spacing: Kirigami.Units.mediumSpacing + 2
 
@@ -70,6 +87,24 @@ MouseArea {
             Kirigami.Icon {
                 Layout.preferredWidth: Kirigami.Units.iconSizes.small
                 Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                source: modelData
+                isMask: true
+                color: Kirigami.Theme.textColor
+            }
+        }
+    }
+
+    ColumnLayout {
+        id: col
+        visible: compact.vertical
+        anchors.centerIn: parent
+        spacing: compact.icons.length > 3 ? Kirigami.Units.smallSpacing + 2 : Kirigami.Units.mediumSpacing + 4
+        Repeater {
+            model: compact.vertical ? compact.icons : []
+            Kirigami.Icon {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
                 source: modelData
                 isMask: true
                 color: Kirigami.Theme.textColor
