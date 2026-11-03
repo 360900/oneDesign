@@ -190,6 +190,7 @@ def _row(pos):
 
 
 SHEEN = 0.07
+LIGHT_CLEAR = 0.7
 
 
 def glass_layers(r, alpha, rim=True, g=None):
@@ -206,6 +207,10 @@ def glass_layers(r, alpha, rim=True, g=None):
         return L
     m = "dark" if g["_dark"] else "light"
     lum, tint, acc = g["lum"][m], g["tint"][m], g["accentMix"][m]
+    if not g["_dark"]:
+        # White over a bright wallpaper reads as frosted at the same alphas, so light glass is
+        # thinned until it lets the backdrop's contrast through as much as dark glass does
+        lum, tint = lum * LIGHT_CLEAR, tint * LIGHT_CLEAR
     spec, line, edge = g["specular"][m], g["line"][m], g["edge"][m]
     # KWin cannot shift backdrop brightness reliably, so bake it in as a flat layer under the rest
     br = g["brightness"][m]

@@ -16,7 +16,7 @@ PlasmoidItem {
 
     readonly property bool dark: Kirigami.Theme.textColor.hsvValue > 0.5
     readonly property int tile: Plasmoid.configuration.tileSize
-    readonly property color fill: dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.55)
+    readonly property color fill: dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.38)
     readonly property color fillHover: dark ? Qt.rgba(1, 1, 1, 0.13) : Qt.rgba(0.2, 0.28, 0.4, 0.2)
     readonly property int gap: 6
     readonly property color accent: Kirigami.Theme.highlightColor

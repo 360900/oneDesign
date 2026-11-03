@@ -33,7 +33,7 @@ PlasmoidItem {
     Connections { target: Plasmoid; function onActivated() { root.toggleDrawer() } }
     onExpandedChanged: if (root.expanded) { root.expanded = false; root.toggleDrawer(); }
     readonly property bool dark: Kirigami.Theme.textColor.hsvValue > 0.5
-    readonly property color fill: dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.55)
+    readonly property color fill: dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.38)
     readonly property color fillHover: dark ? Qt.rgba(1, 1, 1, 0.13) : Qt.rgba(0.2, 0.28, 0.4, 0.2)
     readonly property color accent: Kirigami.Theme.highlightColor
     readonly property color fillPressed: Qt.tint(fillHover, Qt.rgba(accent.r, accent.g, accent.b, dark ? 0.45 : 0.30))
