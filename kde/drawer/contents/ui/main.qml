@@ -622,6 +622,7 @@ PlasmoidItem {
         required property bool run
         readonly property bool running: model.IsWindow === true || model.IsGroupParent === true
         readonly property bool active: model.IsActive === true
+        readonly property bool pinned: model.IsLauncher === true || model.HasLauncher === true
         readonly property bool shown: run ? (running && Plasmoid.configuration.showRunning) : (!running && Plasmoid.configuration.showPinned)
         // TaskMenu asks about audio; the drawer does not track streams
         readonly property bool hasAudioStream: false
@@ -654,7 +655,7 @@ PlasmoidItem {
                 elide: Text.ElideRight
                 color: Kirigami.Theme.textColor
                 font.pixelSize: 14
-                font.weight: row.run && row.active ? Font.DemiBold : Font.Normal
+                font.weight: row.pinned ? Font.Bold : row.run && row.active ? Font.DemiBold : Font.Normal
             }
             Text {
                 visible: row.run && (row.model.ChildCount || 0) > 1
