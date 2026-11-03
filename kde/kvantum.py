@@ -61,6 +61,20 @@ _FLIP = {
 }
 
 
+def _contrast(a, b):
+    lum = lambda c: sum(w * ((v / 255) / 12.92 if v / 255 <= 0.04045 else ((v / 255 + 0.055) / 1.055) ** 2.4)
+                        for w, v in zip((0.2126, 0.7152, 0.0722), c.rgb255))
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def selection_tone(th):
+    """The accent at the OKLCH lightness where both the text color and onAccent read best on it."""
+    c = th.c
+    return max((th.ok(L / 200) for L in range(60, 180)),
+               key=lambda col: min(_contrast(col, c["text"]), _contrast(col, c["onAccent"])))
+
+
 def rr_frame(svg, ident, F, r, fill=None, stroke=None, sw=1.0, inset=0.0, interior=None):
     """Nine-slice a rounded rect: frame pieces `ident-<pos>` (+ optional interior id)."""
     r = min(r, F - inset)
@@ -301,12 +315,14 @@ def build(th, name):
         rr_frame(svg, f"common-{st}", 2, 2, None, stroke, 1, interior=f"common-int-{st}")
         rr_frame(svg, f"group-{st}", rk, rk, c["surface"] if not dark else c["surface"], stroke, 1, interior=f"groupbox-{st}")
 
-    # item views: container selection
-    ivfill = {"normal": None, "focused": hover, "pressed": c["container"], "toggled": c["container"], "disabled": None}
+    # item views: accent selection. Renderers disagree on the text over it (Dolphin and Kirigami use the
+    # highlighted text color, KIO's places panel the normal one), so the fill is the accent tone that reads
+    # under both
+    sel = selection_tone(th)
+    ivfill = {"normal": None, "focused": hover, "pressed": sel, "toggled": sel, "disabled": None}
     for st in STATES:
         rr_frame(svg, f"itemview-{st}", rs, rs, ivfill[st], interior=f"itemview-{st}")
-        rr_frame(svg, f"itemview-{st}-inactive", rs, rs,
-                 ivfill[st] if st in ("normal", "focused", "disabled") else a(.08), interior=f"itemview-{st}-inactive")
+        rr_frame(svg, f"itemview-{st}-inactive", rs, rs, ivfill[st], interior=f"itemview-{st}-inactive")
 
     # menus and tooltips (glass-ish, with shadow)
     menu_F, menu_D = 8, 14
@@ -554,8 +570,8 @@ def kvconfig(th, name, menu_F, menu_D, tip_F, tip_D):
     sec("ItemView", inherits="PanelButtonCommand", **{"frame.element": "itemview", "interior.element": "itemview",
         "frame.top": 6, "frame.bottom": 6, "frame.left": 6, "frame.right": 6, "text.margin.top": 0,
         "text.margin.bottom": 0, "text.margin.left": 2, "text.margin.right": 2, "min_height": 30,
-        "focusFrame": "false", "text.toggle.color": col(c["onContainer"]), "text.press.color": col(c["onContainer"]),
-        "text.toggle.inactive.color": col(text)})
+        "focusFrame": "false", "text.toggle.color": col(c["onAccent"]), "text.press.color": col(c["onAccent"]),
+        "text.toggle.inactive.color": col(c["onAccent"])})
     sec("Scrollbar", inherits="PanelButtonCommand", **{"indicator.element": "arrow", "indicator.size": 10})
     sec("ScrollbarGroove", inherits="PanelButtonCommand", **{"frame": "false", "interior": "false",
         "frame.element": "scrollgroove", "interior.element": "scrollgroove-int"})
