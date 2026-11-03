@@ -61,10 +61,19 @@ PlasmoidItem {
         target: appModel
         function onLauncherListChanged() {
             const l = appModel.launcherList;
-            if (JSON.stringify(l) !== JSON.stringify(Plasmoid.configuration.launchers)) {
-                Plasmoid.configuration.launchers = l;
-                root.syncLaunchers(l, "org.onedesign.drawer");
-            }
+            if (JSON.stringify(l) !== JSON.stringify(Plasmoid.configuration.launchers)) Plasmoid.configuration.launchers = l;
+        }
+    }
+    // Rail and drawer share one pinned list: any change here (rail, settings page) reaches the drawer live
+    Connections {
+        target: Plasmoid.configuration
+        function onLaunchersChanged() { root.shareLaunchers(Plasmoid.configuration.launchers, "org.onedesign.drawer") }
+    }
+    function shareLaunchers(list, other) {
+        const c = Plasmoid.containment;
+        for (const a of (c ? c.applets : [])) {
+            if (a.pluginName === other && JSON.stringify(a.configuration.launchers) !== JSON.stringify(list))
+                a.configuration.launchers = list;
         }
     }
 
@@ -92,12 +101,6 @@ PlasmoidItem {
         }
     }
     readonly property string actionsScript: Qt.resolvedUrl("../actions.sh").toString().replace("file://", "")
-    // Rail and drawer share one pinned list: after a local change, write it to the other widget too
-    function syncLaunchers(list, other) {
-        const js = 'panels().forEach(function (p) { p.widgetIds.forEach(function (i) { var w = p.widgetById(i); '
-            + 'if (w.type == "%s") { w.currentConfigGroup = ["General"]; w.writeConfig("launchers", ' + JSON.stringify(list) + '); } }); });';
-        exec.connectSource("qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript '" + js.replace("%s", other) + "'");
-    }
     signal actionsReady(var acts)
     function fetchActions(url) {
         exec.connectSource("sh '" + actionsScript + "' '" + url + "'");
