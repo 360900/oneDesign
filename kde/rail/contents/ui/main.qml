@@ -4,7 +4,9 @@ import QtQuick.Layouts
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.extras as PlasmaExtras
-import org.kde.plasma.plasma5support as P5Support
+import org.kde.plasma.private.kicker as Kicker
+import org.kde.plasma.private.mpris as Mpris
+import org.kde.plasma.workspace.dbus as DBus
 import org.kde.kirigami as Kirigami
 import org.kde.taskmanager as TaskManager
 
@@ -13,6 +15,9 @@ import org.kde.taskmanager as TaskManager
 PlasmoidItem {
     id: root
     preferredRepresentation: fullRepresentation
+    // Brings an auto-hidden panel back while an app asks for attention, as KDE's task manager does
+    Plasmoid.status: appModel.anyTaskDemandsAttention && Plasmoid.configuration.unhideOnAttention
+        ? PlasmaCore.Types.NeedsAttentionStatus : PlasmaCore.Types.PassiveStatus
 
     readonly property bool dark: Kirigami.Theme.textColor.hsvValue > 0.5
     readonly property int tile: Plasmoid.configuration.tileSize
@@ -22,8 +27,26 @@ PlasmoidItem {
     readonly property color accent: Kirigami.Theme.highlightColor
     readonly property color fillPressed: Qt.tint(fillHover, Qt.rgba(accent.r, accent.g, accent.b, dark ? 0.45 : 0.30))
 
+    // shared with Task, TaskMenu and TaskToolTip
+    readonly property alias tasksModel: appModel
+    readonly property alias virtualDesktopInfo: vdi
+    readonly property alias activityInfo: activityInfo
+    readonly property alias mpris2Source: mpris2Source
+    readonly property var pulseAudio: pulseLoader.item
+    readonly property int normalVolume: pulseLoader.item ? pulseLoader.item.normalVolume : 65536
+    readonly property bool windowViewAvailable: windowViewWatcher.registered
+    property Item toolTipOpenedByClick: null
+    property bool menuOpen: false
+
     TaskManager.VirtualDesktopInfo { id: vdi }
     TaskManager.ActivityInfo { id: activityInfo }
+    Mpris.Mpris2Model { id: mpris2Source }
+    Loader { id: pulseLoader; source: "PulseAudio.qml" }
+    DBus.DBusServiceWatcher {
+        id: windowViewWatcher
+        busType: DBus.BusType.Session
+        watchedService: "org.kde.KWin.Effect.WindowView1"
+    }
 
     // Every window, any desktop: feeds the thumbnails
     TaskManager.TasksModel {
@@ -36,23 +59,31 @@ PlasmoidItem {
         sortMode: TaskManager.TasksModel.SortLastActivated
     }
 
-    // Pinned launchers merged with their running windows: feeds the app column
+    // Pinned launchers merged with their running windows: feeds the app column.
+    // Set up like KDE's icons-only task manager.
     TaskManager.TasksModel {
         id: appModel
-        // Same switches as KDE's task manager
+        readonly property bool manual: sortMode === TaskManager.TasksModel.SortManual
         virtualDesktop: vdi.currentDesktop
         activity: activityInfo.currentActivity
         screenGeometry: Plasmoid.containment.screenGeometry
-        filterByVirtualDesktop: Plasmoid.configuration.onlyCurrentDesktop
-        filterByScreen: Plasmoid.configuration.onlyCurrentScreen
-        filterByActivity: Plasmoid.configuration.onlyCurrentActivity
-        filterMinimized: Plasmoid.configuration.onlyMinimized
-        groupMode: Plasmoid.configuration.grouping === 0 ? TaskManager.TasksModel.GroupDisabled : TaskManager.TasksModel.GroupApplications
-        sortMode: [TaskManager.TasksModel.SortManual, TaskManager.TasksModel.SortAlpha,
-                   TaskManager.TasksModel.SortVirtualDesktop, TaskManager.TasksModel.SortActivity][Plasmoid.configuration.sorting] ?? TaskManager.TasksModel.SortManual
-        separateLaunchers: Plasmoid.configuration.separateLaunchers
-        launchInPlace: true
+        filterByVirtualDesktop: Plasmoid.configuration.showOnlyCurrentDesktop
+        filterByScreen: Plasmoid.configuration.showOnlyCurrentScreen
+        filterByActivity: Plasmoid.configuration.showOnlyCurrentActivity
+        filterNotMinimized: Plasmoid.configuration.showOnlyMinimized
+        hideActivatedLaunchers: true
+        groupMode: Plasmoid.configuration.groupingStrategy === 0 ? TaskManager.TasksModel.GroupDisabled : TaskManager.TasksModel.GroupApplications
+        groupingAppIdBlacklist: Plasmoid.configuration.groupingAppIdBlacklist
+        groupingLauncherUrlBlacklist: Plasmoid.configuration.groupingLauncherUrlBlacklist
+        sortMode: [TaskManager.TasksModel.SortDisabled, TaskManager.TasksModel.SortManual, TaskManager.TasksModel.SortAlpha,
+                   TaskManager.TasksModel.SortVirtualDesktop, TaskManager.TasksModel.SortActivity,
+                   TaskManager.TasksModel.SortWindowPositionHorizontal][Plasmoid.configuration.sortingStrategy] ?? TaskManager.TasksModel.SortManual
+        // Running apps take their pin's place unless pins are kept separate
+        separateLaunchers: true
+        launchInPlace: manual && !Plasmoid.configuration.separateLaunchers
         launcherList: Plasmoid.configuration.launchers
+        onGroupingAppIdBlacklistChanged: Plasmoid.configuration.groupingAppIdBlacklist = groupingAppIdBlacklist
+        onGroupingLauncherUrlBlacklistChanged: Plasmoid.configuration.groupingLauncherUrlBlacklist = groupingLauncherUrlBlacklist
     }
 
     // Pin, unpin and reorder are written back so they survive a restart
@@ -76,31 +107,150 @@ PlasmoidItem {
         }
     }
 
-    P5Support.DataSource {
-        id: exec
-        engine: "executable"
-        onNewData: (source, data) => {
-            if (source.indexOf("sh '" + root.actionsScript) === 0) {
-                root.actionsReady((data.stdout || "").split("\n").filter(l => l.indexOf("\t") > 0)
-                    .map(l => ({ name: l.split("\t")[0], cmd: l.split("\t").slice(1).join("\t") })));
+    // ---- helpers shared with the task items, after KDE's TaskTools.js
+    function foreachChildTask(callback, idx) {
+        const n = appModel.rowCount(idx);
+        if (n > 0) for (let i = 0; i < n; ++i) callback(appModel.index(i, 0, idx));
+        else callback(idx);
+    }
+    function groupTopTask(list, role) {
+        let top = -1, res = undefined;
+        for (const idx of list) {
+            const v = appModel.data(idx, role);
+            if (v !== undefined && v > top) { top = v; res = idx; }
+        }
+        return res;
+    }
+    function isApplication(url) {
+        const u = url.toString();
+        return u.startsWith("applications:") || u.endsWith(".desktop");
+    }
+    function windowsHovered(winIds, hovered) {
+        if (!Plasmoid.configuration.highlightWindows) return;
+        DBus.SessionBus.asyncCall({ service: "org.kde.KWin.HighlightWindow", path: "/org/kde/KWin/HighlightWindow",
+            iface: "org.kde.KWin.HighlightWindow", member: "highlightWindows",
+            arguments: [hovered ? winIds.map(String) : []], signature: "(as)" });
+    }
+    function cancelHighlightWindows() {
+        if (Plasmoid.configuration.highlightWindows) windowsHovered([], false);
+    }
+    function activateWindowView(winIds) {
+        cancelHighlightWindows();
+        DBus.SessionBus.asyncCall({ service: "org.kde.KWin.Effect.WindowView1", path: "/org/kde/KWin/Effect/WindowView1",
+            iface: "org.kde.KWin.Effect.WindowView1", member: "activate", arguments: [winIds.map(String)], signature: "(as)" });
+    }
+
+    // Wheel over the apps, as in KDE: all tasks, the hovered app's windows, or the hovered app's volume
+    function wheelTasks(anchor, steps) {
+        const mode = Plasmoid.configuration.wheelEnabled;
+        if (mode === 0 || steps === 0) return;
+        const R = TaskManager.AbstractTasksModel;
+        if (mode === 3) {
+            if (!anchor || !anchor.audioStreams.length || !pulseAudio) return;
+            const loudest = anchor.audioStreams.reduce((l, s) => Math.max(l, s.volume), 0);
+            const step = pulseAudio.normalVolume * 5 / 100 * steps;
+            for (const s of anchor.audioStreams) {
+                const v = Math.max(0, Math.min(pulseAudio.normalVolume, s.volume + (loudest > 0 ? step * s.volume / loudest : step)));
+                s.setVolume(v);
+                s.setMuted(v === 0);
             }
-            disconnectSource(source);
+            return;
+        }
+        const skip = Plasmoid.configuration.wheelSkipMinimized;
+        let list = [];
+        for (let i = 0; i < appModel.count; ++i) {
+            const idx = appModel.makeModelIndex(i);
+            if (appModel.data(idx, R.IsLauncher) || appModel.data(idx, R.IsStartup)) continue;
+            const onlyThis = mode === 2 && anchor && anchor.index === i;
+            if (mode === 2 && !onlyThis) continue;
+            if (appModel.data(idx, R.IsGroupParent)) {
+                for (let j = 0; j < appModel.rowCount(idx); ++j) {
+                    const c = appModel.makeModelIndex(i, j);
+                    if (!skip || !appModel.data(c, R.IsHidden)) list.push(c);
+                }
+            } else if (!skip || !appModel.data(idx, R.IsHidden)) list.push(idx);
+        }
+        if (!list.length) return;
+        const next = steps < 0;
+        const cur = list.findIndex(x => appModel.data(x, R.IsActive) === true);
+        let t = 0;
+        if (cur >= 0) t = next ? (cur + 1) % list.length : (cur - 1 + list.length) % list.length;
+        appModel.requestActivate(list[t]);
+    }
+
+    // ---- context menu: Kicker supplies the app's jump list and recent files
+    Kicker.SimpleFavoritesModel { id: appEntry }
+    Instantiator {
+        model: appEntry
+        delegate: QtObject {
+            required property var model
+            Component.onCompleted: root.showTaskMenu(model.actionList || [])
         }
     }
-    readonly property string actionsScript: Qt.resolvedUrl("../actions.sh").toString().replace("file://", "")
-    signal actionsReady(var acts)
-    function fetchActions(url) {
-        exec.connectSource("sh '" + actionsScript + "' '" + url + "'");
+    property Item menuTask: null
+    function openTaskMenu(task) {
+        menuTask = task;
+        const app = task.model.AppId || "";
+        appEntry.favorites = [];
+        if (!app) { showTaskMenu([]); return; }
+        appEntry.favorites = [app.endsWith(".desktop") ? app : app + ".desktop"]; // the Instantiator shows the menu once loaded
     }
-    function kwin(args) {
-        exec.connectSource("qdbus6 org.kde.KWin " + args);
+    function showTaskMenu(actions) {
+        if (!menuTask) return;
+        const t = menuTask;
+        menuTask = null;
+        const m = taskMenuComponent.createObject(root, { r: root, modelIndex: t.modelIndex(), appActions: actions, visualParent: t });
+        menuOpen = true;
+        m.statusChanged.connect(() => { if (m.status === PlasmaExtras.Menu.Closed) root.menuOpen = false; });
+        m.show();
+    }
+    function triggerAppAction(a) {
+        appEntry.trigger(0, a.actionId, a.actionArgument);
+    }
+    Component { id: taskMenuComponent; TaskMenu {} }
+
+    // Textual list of a group's windows
+    function openGroupList(task) {
+        const m = groupMenuComponent.createObject(root, { visualParent: task, groupIndex: task.modelIndex() });
+        m.refresh();
+        m.openRelative();
+    }
+    Component {
+        id: groupMenuComponent
+        PlasmaExtras.Menu {
+            id: gm
+            property var groupIndex
+            placement: Plasmoid.location === PlasmaCore.Types.RightEdge ? PlasmaExtras.Menu.LeftPosedTopAlignedPopup
+                                                                        : PlasmaExtras.Menu.RightPosedTopAlignedPopup
+            onStatusChanged: if (status === PlasmaExtras.Menu.Closed) gm.destroy()
+            function refresh() {
+                clearMenuItems();
+                for (let i = 0; i < appModel.rowCount(groupIndex); ++i) {
+                    const c = appModel.index(i, 0, groupIndex);
+                    const item = Qt.createQmlObject(`import org.kde.plasma.extras as PlasmaExtras
+                        PlasmaExtras.MenuItem {}`, gm);
+                    item.text = appModel.data(c, Qt.DisplayRole);
+                    item.icon = appModel.data(c, Qt.DecorationRole);
+                    item.checkable = true;
+                    item.checked = appModel.data(c, TaskManager.AbstractTasksModel.IsActive) === true;
+                    item.clicked.connect(() => appModel.requestActivate(c));
+                    gm.addMenuItem(item);
+                }
+            }
+        }
+    }
+
+    // ---- workspaces, through KWin
+    function kwin(path, iface, member, signature, args) {
+        DBus.SessionBus.asyncCall({ service: "org.kde.KWin", path: path, iface: iface, member: member, signature: signature, arguments: args });
     }
     function switchTo(n) {
-        kwin("/KWin org.kde.KWin.setCurrentDesktop " + n);
+        kwin("/KWin", "org.kde.KWin", "setCurrentDesktop", "(i)", [new DBus.int32(n)]);
     }
     // Workspaces are stacked in one column, so KWin's slide animation runs vertically too
     function stackDesktops() {
-        kwin("/VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.rows " + Math.max(1, vdi.numberOfDesktops));
+        kwin("/VirtualDesktopManager", "org.freedesktop.DBus.Properties", "Set", "(ssv)",
+             ["org.kde.KWin.VirtualDesktopManager", "rows", new DBus.variant(Math.max(1, vdi.numberOfDesktops))]);
     }
     Connections {
         target: vdi
@@ -108,7 +258,8 @@ PlasmoidItem {
     }
     function addDesktop() {
         const n = vdi.numberOfDesktops;
-        kwin("/VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.createDesktop " + n + " 'Desktop " + (n + 1) + "'");
+        kwin("/VirtualDesktopManager", "org.kde.KWin.VirtualDesktopManager", "createDesktop", "(us)",
+             [new DBus.uint32(n), i18n("Desktop %1", n + 1)]);
     }
     // Inset with rounded corners normally; flush and full height while a window is maximized
     property bool maximized: false
@@ -135,48 +286,23 @@ PlasmoidItem {
         function onCurrentDesktopChanged() { root.recountMaximized() }
     }
     onMaximizedChanged: lengthTimer.restart()
-
-    // Panel visibility: always, auto-hide (slides away, back on hover at the edge), or windows may cover it
-    Connections {
-        target: Plasmoid.configuration
-        function onHideModeChanged() {
-            const mode = ["none", "autohide", "windowscover"][Plasmoid.configuration.hideMode] || "none";
-            exec.connectSource("qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "
-                + "'var p = panels().filter(function (x) { return x.id == " + Plasmoid.containment.id + "; })[0]; if (p) { p.hiding = \"" + mode + "\"; }'");
-        }
+    function panelScript(body) {
+        DBus.SessionBus.asyncCall({ service: "org.kde.plasmashell", path: "/PlasmaShell", iface: "org.kde.PlasmaShell",
+            member: "evaluateScript", signature: "(s)",
+            arguments: ["var p = panels().filter(function (x) { return x.id == " + Plasmoid.containment.id + "; })[0]; if (p) { " + body + " }"] });
     }
     Timer {
         id: lengthTimer
         interval: 250
         onTriggered: {
             if (!Plasmoid.configuration.fillWhenMaximized) return;
-            const id = Plasmoid.containment.id;
             const inset = Screen.height - 32;
-            const body = root.maximized
+            root.panelScript(root.maximized
                 ? 'p.lengthMode = "fill";'
-                : 'p.lengthMode = "custom"; p.alignment = "center"; p.minimumLength = ' + inset + '; p.maximumLength = ' + inset + ';';
-            exec.connectSource("qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "
-                + "'var p = panels().filter(function (x) { return x.id == " + id + "; })[0]; if (p) { " + body + " }'");
+                : 'p.lengthMode = "custom"; p.alignment = "center"; p.minimumLength = ' + inset + '; p.maximumLength = ' + inset + ';');
         }
     }
     Component.onCompleted: { recountMaximized(); stackDesktops(); }
-
-    // Wheel over the apps: activate the next or previous running app
-    function cycleTasks(dir) {
-        const R = TaskManager.AbstractTasksModel;
-        const run = [];
-        let cur = -1;
-        for (let i = 0; i < appModel.count; i++) {
-            const ix = appModel.makeModelIndex(i);
-            if (appModel.data(ix, R.IsWindow) !== true && appModel.data(ix, R.IsGroupParent) !== true) continue;
-            if (appModel.data(ix, R.IsActive) === true) cur = run.length;
-            run.push(i);
-        }
-        if (!run.length) return;
-        const next = run[((cur < 0 ? (dir > 0 ? -1 : 0) : cur) + dir + run.length) % run.length];
-        const grp = appModel.data(appModel.makeModelIndex(next), R.IsGroupParent) === true;
-        appModel.requestActivate(grp ? appModel.makeModelIndex(next, 0) : appModel.makeModelIndex(next));
-    }
 
     function currentIndex() {
         return vdi.desktopIds.indexOf(vdi.currentDesktop);
@@ -193,30 +319,6 @@ PlasmoidItem {
         readonly property real thumbW: Math.min(48, width - 14)
         readonly property real thumbH: Math.round(thumbW * aspect)
 
-        // Fetches the app's own actions (private window and so on), then shows the menu
-        function openMenu(app) {
-            menu.cur = app;
-            menu.pinned = appModel.launcherPosition(app.model.LauncherUrlWithoutIcon) >= 0;
-            root.fetchActions(app.model.LauncherUrlWithoutIcon);
-        }
-        Connections {
-            target: root
-            function onActionsReady(acts) {
-                const app = menu.cur;
-                const items = acts.map(a => ({ id: "action", text: a.name, cmd: a.cmd, icon: "", separator: false }));
-                if (items.length) items.push({ id: "", text: "", icon: "", separator: true });
-                items.push({ id: "new", text: "New window", icon: "window-new-symbolic", separator: false });
-                items.push({ id: "pin", text: menu.pinned ? "Unpin" : "Pin to rail", icon: menu.pinned ? "window-unpin-symbolic" : "pin-symbolic", separator: false });
-                if (app.running) {
-                    items.push({ id: "", text: "", icon: "", separator: true });
-                    items.push({ id: "close", text: "Close", icon: "window-close-symbolic", separator: false });
-                }
-                menu.model = items;
-                menu.visualParent = app;
-                menu.openRelative();
-            }
-        }
-
         MouseArea {
             // wheel anywhere on the workspace block cycles desktops
             anchors.left: parent.left
@@ -231,18 +333,6 @@ PlasmoidItem {
                 const i = root.currentIndex() + (wheel.angleDelta.y < 0 ? 1 : -1);
                 root.switchTo(((i % n) + n) % n + 1);
             }
-        }
-
-        MouseArea {
-            // wheel over the apps cycles through the running ones
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: col.top
-            anchors.topMargin: appCol.y
-            height: appCol.height
-            enabled: Plasmoid.configuration.wheelSwitchTasks
-            acceptedButtons: Qt.NoButton
-            onWheel: wheel => root.cycleTasks(wheel.angleDelta.y < 0 ? 1 : -1)
         }
 
         GridLayout {
@@ -417,156 +507,43 @@ PlasmoidItem {
             }
 
             // ---- apps
-            Column {
+            ListView {
                 id: appCol
                 Layout.fillWidth: true
+                Layout.preferredHeight: contentHeight
                 Layout.row: Plasmoid.configuration.workspacesFirst ? 2 : 0
                 visible: Plasmoid.configuration.showApps
+                interactive: false
                 spacing: Plasmoid.configuration.appSpacing
-                Repeater {
-                    model: appModel
-                    delegate: Item {
-                        id: app
-                        required property int index
-                        required property var model
-                        readonly property bool running: model.IsWindow === true || model.IsGroupParent === true
-                        readonly property bool active: model.IsActive === true
-                        width: parent.width
-                        height: root.tile
-                        visible: Plasmoid.configuration.showPinned || running
-                        z: dragH.active ? 10 : 0
-                        property int startIndex: 0
-                        readonly property real step: root.tile + appCol.spacing
-                        readonly property real dy: dragH.active ? dragH.centroid.scenePosition.y - dragH.centroid.scenePressPosition.y : 0
+                // New tasks appear at the bottom, or at the top
+                verticalLayoutDirection: Plasmoid.configuration.reverseMode ? ListView.BottomToTop : ListView.TopToBottom
+                model: appModel
+                delegate: Task { r: root; view: appCol }
+                displaced: Transition { NumberAnimation { properties: "y"; duration: 140; easing.type: Easing.OutCubic } }
 
-                        Item {
-                            id: body
-                            width: parent.width; height: parent.height
-                            y: dragH.active ? app.dy - (app.index - app.startIndex) * app.step : 0
-                            opacity: dragH.active ? 0.85 : 1
-                            Behavior on y { enabled: !dragH.active; NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-
-                        Rectangle { // running tab on the screen edge; taller when focused
-                            x: 0
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 3.5
-                            height: app.active ? 28 : 14
-                            radius: 2
-                            color: root.accent
-                            visible: app.running && Plasmoid.configuration.showRunningIndicator
-                            Behavior on height { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-                            // flat on the screen edge, rounded inward
-                            Rectangle { width: 2; height: parent.height; color: parent.color }
-                        }
-                        Rectangle { // resting tile: shows behind icons that are not full-bleed
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            width: root.tile; height: root.tile
-                            radius: root.tile * 0.26
-                            color: root.fill
-                            border.width: 1
-                            border.color: Qt.rgba(1, 1, 1, root.dark ? 0.12 : 0.6)
-                        }
-                        Kirigami.Icon {
-                            anchors.centerIn: parent
-                            width: Plasmoid.configuration.iconSize; height: width
-                            roundToIconSize: false
-                            source: app.model.decoration
-                        }
-                        Rectangle { // hover and press recolor the whole tile, icon included
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            width: root.tile; height: root.tile
-                            radius: root.tile * 0.26
-                            color: appTap.pressed ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.25)
-                                   : appHover.hovered ? (root.dark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
-                                   : app.active ? (root.dark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.05)) : (root.dark ? Qt.rgba(1, 1, 1, 0) : Qt.rgba(0, 0, 0, 0))
-                            Behavior on color { ColorAnimation { duration: 100 } }
-                        }
-                        Rectangle { // asks for attention
-                            id: attention
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            width: root.tile; height: root.tile
-                            radius: root.tile * 0.26
-                            color: root.accent
-                            opacity: 0
-                            visible: Plasmoid.configuration.highlightAttention && app.model.IsDemandingAttention === true
-                            SequentialAnimation on opacity {
-                                running: attention.visible
-                                loops: Animation.Infinite
-                                NumberAnimation { to: 0.5; duration: 600 }
-                                NumberAnimation { to: 0.1; duration: 600 }
-                            }
-                        }
-                        }
-                        onDyChanged: if (dragH.active) {
-                            const t = Math.max(0, Math.min(appModel.count - 1, Math.round(startIndex + dy / step)));
-                            if (t !== index) appModel.move(index, t);
-                        }
-                        PlasmaCore.ToolTipArea {
-                            anchors.fill: parent
-                            active: Plasmoid.configuration.showToolTips && !dragH.active
-                            location: Plasmoid.location
-                            mainText: app.model.AppName || app.model.display || ""
-                            subText: app.running && app.model.IsGroupParent !== true ? (app.model.display || "") : ""
-                        }
-                        HoverHandler { id: appHover }
-                        DragHandler {
-                            id: dragH
-                            enabled: appModel.sortMode === TaskManager.TasksModel.SortManual
-                            target: null
-                            acceptedButtons: Qt.LeftButton
-                            xAxis.enabled: false
-                            onActiveChanged: {
-                                if (active) app.startIndex = app.index;
-                                else appModel.syncLaunchers(); // move() alone does not touch the launcher list
-                            }
-                        }
-                        MouseArea { // accepts the click, so Plasma's own panel menu stays closed
-                            anchors.fill: parent
-                            acceptedButtons: Qt.RightButton
-                            onClicked: rail.openMenu(app)
-                        }
-                        TapHandler {
-                            id: appTap
-                            acceptedButtons: Qt.LeftButton
-                            onTapped: {
-                                const idx = appModel.makeModelIndex(app.index);
-                                if (!app.running) appModel.requestNewInstance(idx);
-                                else if (app.active && app.model.IsGroupParent !== true) appModel.requestToggleMinimized(idx);
-                                else appModel.requestActivate(app.model.IsGroupParent === true ? appModel.makeModelIndex(app.index, 0) : idx);
-                            }
-                        }
-                        TapHandler {
-                            acceptedButtons: Qt.MiddleButton
-                            onTapped: {
-                                const idx = appModel.makeModelIndex(app.index);
-                                switch (Plasmoid.configuration.middleClick) {
-                                case 1: if (app.running) appModel.requestClose(idx); break;
-                                case 2: appModel.requestNewInstance(idx); break;
-                                case 3: if (app.running) appModel.requestToggleMinimized(idx); break;
-                                case 4: if (app.running) appModel.requestVirtualDesktops(idx, [vdi.currentDesktop]); break;
-                                }
-                            }
-                        }
+                WheelHandler {
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    enabled: Plasmoid.configuration.wheelEnabled !== 0
+                    property real acc: 0
+                    onWheel: event => {
+                        acc += event.angleDelta.y;
+                        const steps = Math.trunc(acc / 120);
+                        if (!steps) return;
+                        acc -= steps * 120;
+                        root.wheelTasks(appCol.itemAt(event.x, event.y + appCol.contentY), steps);
                     }
                 }
-            }
-        }
-
-        // A native menu: item popups would be clipped to the narrow panel window
-        PlasmaExtras.ModelContextMenu {
-            id: menu
-            property var cur: null
-            property bool pinned: false
-            onClicked: m => {
-                const idx = appModel.makeModelIndex(menu.cur.index);
-                switch (m.id) {
-                case "action": exec.connectSource(m.cmd); break;
-                case "new": appModel.requestNewInstance(idx); break;
-                case "pin":
-                    if (menu.pinned) appModel.requestRemoveLauncher(menu.cur.model.LauncherUrlWithoutIcon);
-                    else appModel.requestAddLauncher(menu.cur.model.LauncherUrl);
-                    break;
-                case "close": appModel.requestClose(idx); break;
+                // apps dropped on the column are pinned
+                DropArea {
+                    anchors.fill: parent
+                    z: -1
+                    keys: ["text/uri-list"]
+                    onDropped: drop => {
+                        if (drop.hasUrls && drop.urls.every(u => root.isApplication(u))) {
+                            drop.urls.forEach(u => appModel.requestAddLauncher(u));
+                            drop.accept(Qt.CopyAction);
+                        }
+                    }
                 }
             }
         }

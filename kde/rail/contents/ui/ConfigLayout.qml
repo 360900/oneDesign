@@ -11,8 +11,6 @@ KCM.SimpleKCM {
     property alias cfg_showApps: showApps.checked
     property alias cfg_showSeparator: sep.checked
     property bool cfg_workspacesFirst
-    property int cfg_hideMode
-    property int cfg_hideModeDefault
     property alias cfg_tileSize: tile.value
     property alias cfg_iconSize: icon.value
     property alias cfg_appSpacing: spacing.value
@@ -56,12 +54,6 @@ KCM.SimpleKCM {
         QQC.SpinBox { id: spacing; Kirigami.FormData.label: i18n("Spacing:"); from: 0; to: 20; enabled: showApps.checked }
 
         Item { Kirigami.FormData.isSection: true; Kirigami.FormData.label: i18n("Panel") }
-        QQC.ComboBox {
-            Kirigami.FormData.label: i18n("Visibility:")
-            model: [i18n("Always visible"), i18n("Auto-hide (expands on hover)"), i18n("Windows can cover it")]
-            currentIndex: cfg_hideMode
-            onActivated: index => cfg_hideMode = index
-        }
         QQC.CheckBox { id: fillMax; text: i18n("Use the full screen height while a window is maximized") }
     }
 }

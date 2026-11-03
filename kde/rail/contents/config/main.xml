@@ -5,7 +5,6 @@
   <kcfgfile name=""/>
   <group name="General">
     <entry name="launchers" type="StringList"><default></default></entry>
-    <entry name="hideMode" type="Int"><default>0</default><min>0</min><max>2</max></entry>
     <entry name="fillWhenMaximized" type="Bool"><default>true</default></entry>
     <entry name="maxDesktops" type="Int"><default>6</default><min>1</min><max>12</max></entry>
 
@@ -20,18 +19,29 @@
     <entry name="iconSize" type="Int"><default>32</default><min>20</min><max>48</max></entry>
     <entry name="appSpacing" type="Int"><default>8</default><min>0</min><max>20</max></entry>
 
-    <!-- tasks, as in KDE's task manager -->
+    <!-- tasks: KDE's task manager keys and defaults -->
     <entry name="showPinned" type="Bool"><default>true</default></entry>
     <entry name="separateLaunchers" type="Bool"><default>false</default></entry>
-    <entry name="onlyCurrentDesktop" type="Bool"><default>true</default></entry>
-    <entry name="onlyCurrentScreen" type="Bool"><default>false</default></entry>
-    <entry name="onlyCurrentActivity" type="Bool"><default>false</default></entry>
-    <entry name="onlyMinimized" type="Bool"><default>false</default></entry>
-    <entry name="grouping" type="Int"><default>1</default></entry>
-    <entry name="sorting" type="Int"><default>0</default></entry>
-    <entry name="middleClick" type="Int"><default>2</default></entry>
-    <entry name="wheelSwitchTasks" type="Bool"><default>false</default></entry>
+    <entry name="showOnlyCurrentScreen" type="Bool"><default>false</default></entry>
+    <entry name="showOnlyCurrentDesktop" type="Bool"><default>true</default></entry>
+    <entry name="showOnlyCurrentActivity" type="Bool"><default>true</default></entry>
+    <entry name="showOnlyMinimized" type="Bool"><default>false</default></entry>
+    <entry name="unhideOnAttention" type="Bool"><default>true</default></entry>
+    <entry name="groupingStrategy" type="Int"><default>1</default></entry>
+    <entry name="groupedTaskVisualization" type="Int"><default>0</default></entry>
+    <entry name="groupingAppIdBlacklist" type="StringList"><default></default></entry>
+    <entry name="groupingLauncherUrlBlacklist" type="StringList"><default></default></entry>
+    <entry name="sortingStrategy" type="Int"><default>1</default></entry>
+    <entry name="minimizeActiveTaskOnClick" type="Bool"><default>true</default></entry>
+    <entry name="middleClickAction" type="Int"><default>2</default></entry>
+    <entry name="wheelEnabled" type="Int"><default>0</default></entry>
+    <entry name="wheelSkipMinimized" type="Bool"><default>true</default></entry>
+    <entry name="reverseMode" type="Bool"><default>false</default></entry>
     <entry name="showToolTips" type="Bool"><default>true</default></entry>
+    <entry name="highlightWindows" type="Bool"><default>false</default></entry>
+    <entry name="indicateAudioStreams" type="Bool"><default>true</default></entry>
+    <entry name="interactiveMute" type="Bool"><default>true</default></entry>
+    <entry name="tooltipControls" type="Bool"><default>true</default></entry>
     <entry name="showRunningIndicator" type="Bool"><default>true</default></entry>
     <entry name="highlightAttention" type="Bool"><default>true</default></entry>
   </group>
