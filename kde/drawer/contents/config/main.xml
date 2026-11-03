@@ -11,7 +11,7 @@
     <entry name="showPinned" type="Bool"><default>true</default></entry>
     <entry name="runningFirst" type="Bool"><default>true</default></entry>
     <entry name="groupApps" type="Bool"><default>true</default></entry>
-    <entry name="appsOnlySearch" type="Bool"><default>false</default></entry>
+    <entry name="showAllApps" type="Bool"><default>true</default></entry>
     <entry name="closeWhenUnfocused" type="Bool"><default>true</default></entry>
     <entry name="showUserRow" type="Bool"><default>true</default></entry>
     <entry name="showUserName" type="Bool"><default>true</default></entry>

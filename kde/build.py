@@ -92,9 +92,9 @@ def build(out, accent="blue", wall="lagoon", shell="bar"):
         for f in sorted((HERE / src).rglob("*")):
             if f.is_file():
                 write(out, f"share/plasma/plasmoids/{ident}/{f.relative_to(HERE / src)}", f.read_text())
-    write(out, "share/plasma/plasmoids/org.onedesign.drawer/contents/actions.sh", (HERE / "shared/actions.sh").read_text())
     for ident in ("org.onedesign.rail", "org.onedesign.drawer"):
-        write(out, f"share/plasma/plasmoids/{ident}/contents/ui/ConfigPinned.qml", (HERE / "shared/ConfigPinned.qml").read_text())
+        for name in ("ConfigPinned.qml", "TaskMenu.qml"):
+            write(out, f"share/plasma/plasmoids/{ident}/contents/ui/{name}", (HERE / "shared" / name).read_text())
     for rel, data in extras.rail_wallpapers(wall).items():
         write(out, f"share/plasma/plasmoids/org.onedesign.rail/{rel}", data)
     write(out, "share/onedesign/lockscreen/LockScreenUi.qml", (HERE / "lockscreen/LockScreenUi.qml").read_text())

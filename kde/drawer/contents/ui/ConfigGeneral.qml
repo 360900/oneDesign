@@ -10,7 +10,7 @@ KCM.SimpleKCM {
     property alias cfg_showPinned: pinned.checked
     property bool cfg_runningFirst
     property alias cfg_groupApps: group.checked
-    property alias cfg_appsOnlySearch: appsOnly.checked
+    property alias cfg_showAllApps: allApps.checked
     property alias cfg_closeWhenUnfocused: closeUnfocused.checked
     property alias cfg_showUserRow: userRow.checked
     property alias cfg_showUserName: userName.checked
@@ -23,7 +23,7 @@ KCM.SimpleKCM {
     property bool cfg_showPinnedDefault
     property bool cfg_runningFirstDefault
     property bool cfg_groupAppsDefault
-    property bool cfg_appsOnlySearchDefault
+    property bool cfg_showAllAppsDefault
     property bool cfg_closeWhenUnfocusedDefault
     property bool cfg_showUserRowDefault
     property bool cfg_showUserNameDefault
@@ -48,9 +48,14 @@ KCM.SimpleKCM {
             onActivated: index => cfg_runningFirst = index === 0
         }
         QQC.CheckBox { id: group; text: i18n("Group windows of the same app") }
+        QQC.CheckBox { id: allApps; text: i18n("Show all apps, by category") }
 
         Item { Kirigami.FormData.isSection: true; Kirigami.FormData.label: i18n("Search") }
-        QQC.CheckBox { id: appsOnly; text: i18n("Search apps only (no files, settings or calculator)") }
+        QQC.Button {
+            text: i18n("Configure Search…")
+            icon.name: "settings-configure"
+            onClicked: KCM.KCMLauncher.openSystemSettings("kcm_plasmasearch")
+        }
 
         Item { Kirigami.FormData.isSection: true; Kirigami.FormData.label: i18n("Bottom row") }
         QQC.CheckBox { id: userRow; text: i18n("Show the bottom row") }

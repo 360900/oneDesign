@@ -3,7 +3,7 @@
     "KPlugin": {
         "Authors": [{ "Name": "oneDesign" }],
         "Category": "Application Launchers",
-        "Description": "Full-height drawer: search, running and pinned apps",
+        "Description": "Full-height drawer: search, running, pinned and all apps",
         "Icon": "view-app-grid-symbolic",
         "Id": "org.onedesign.drawer",
         "License": "GPL-2.0-or-later",

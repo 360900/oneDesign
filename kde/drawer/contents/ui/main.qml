@@ -4,12 +4,16 @@ import QtQuick.Window
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.extras as PlasmaExtras
-import org.kde.plasma.plasma5support as P5Support
 import org.kde.plasma.private.kicker as Kicker
+import org.kde.plasma.private.mpris as Mpris
+import org.kde.plasma.private.sessions as Sessions
+import org.kde.milou as Milou
+import org.kde.coreaddons as KCoreAddons
 import org.kde.kirigami as Kirigami
 import org.kde.taskmanager as TaskManager
 
-// The One drawer: opens beside the rail, full height. Search first; otherwise running and pinned apps.
+// The One drawer: opens beside the rail, full height. Search runs KRunner's own model, so Plasma Search
+// settings (enabled plugins, favorites) apply as they do in KRunner. Idle: running, pinned and all apps.
 PlasmoidItem {
     id: root
     preferredRepresentation: fullRepresentation
@@ -42,6 +46,10 @@ PlasmoidItem {
     readonly property real frameV: dlg.margins ? dlg.margins.top + dlg.margins.bottom : 18
     readonly property int drawerH: Math.max(400, Math.round(Screen.height - 52 - frameV))
 
+    // ---- running and pinned apps, shared with the rail
+    TaskManager.VirtualDesktopInfo { id: vdi }
+    TaskManager.ActivityInfo { id: activityInfo }
+    Mpris.Mpris2Model { id: mpris2Source }
     TaskManager.TasksModel {
         id: appModel
         filterByVirtualDesktop: false
@@ -49,33 +57,17 @@ PlasmoidItem {
         filterByActivity: false
         groupMode: Plasmoid.configuration.groupApps ? TaskManager.TasksModel.GroupApplications : TaskManager.TasksModel.GroupDisabled
         sortMode: TaskManager.TasksModel.SortManual
-        separateLaunchers: false
+        separateLaunchers: true
         launchInPlace: true
         launcherList: Plasmoid.configuration.launchers
     }
-
-    Kicker.RunnerModel {
-        id: runner
-        appletInterface: root
-        mergeResults: true
-        runners: Plasmoid.configuration.appsOnlySearch ? ["services"] : []
-        query: root.open ? root.text : ""
-    }
-
-    P5Support.DataSource {
-        id: exec
-        engine: "executable"
-        onNewData: (source, data) => {
-            if (source === "id -un") user.name = (data.stdout || "").trim();
-            else if (source.indexOf("sh '" + root.actionsScript) === 0)
-                root.showMenu((data.stdout || "").split("\n").filter(l => l.indexOf("\t") > 0)
-                    .map(l => ({ name: l.split("\t")[0], cmd: l.split("\t").slice(1).join("\t") })));
-            disconnectSource(source);
+    Connections {
+        target: appModel
+        function onLauncherListChanged() {
+            const l = appModel.launcherList;
+            if (JSON.stringify(l) !== JSON.stringify(Plasmoid.configuration.launchers)) Plasmoid.configuration.launchers = l;
         }
-        Component.onCompleted: connectSource("id -un")
     }
-    QtObject { id: user; property string name: "" }
-
     // Rail and drawer share one pinned list: any change here reaches the rail live
     Connections {
         target: Plasmoid.configuration
@@ -88,56 +80,133 @@ PlasmoidItem {
                 a.configuration.launchers = list;
         }
     }
+    // A desktop file url as a launcher entry: applications:<name> when it lives in an applications dir
+    function launcherFor(desktopUrl) {
+        const u = desktopUrl.toString();
+        return u.indexOf("/applications/") >= 0 ? "applications:" + u.substring(u.lastIndexOf("/") + 1) : u;
+    }
+    function isPinned(launcher) { return appModel.launcherPosition(launcher) >= 0; }
+    function togglePin(launcher) {
+        if (isPinned(launcher)) appModel.requestRemoveLauncher(launcher);
+        else appModel.requestAddLauncher(launcher);
+    }
 
-    // Right-click menu, the same as on the rail
-    readonly property string actionsScript: Qt.resolvedUrl("../actions.sh").toString().replace("file://", "")
-    Connections {
-        target: appModel
-        function onLauncherListChanged() {
-            const l = appModel.launcherList;
-            if (JSON.stringify(l) !== JSON.stringify(Plasmoid.configuration.launchers)) Plasmoid.configuration.launchers = l;
+    // ---- TaskMenu helpers (same menu as the rail)
+    readonly property alias tasksModel: appModel
+    readonly property alias virtualDesktopInfo: vdi
+    readonly property alias activityInfo: activityInfo
+    readonly property alias mpris2Source: mpris2Source
+    function foreachChildTask(callback, idx) {
+        const n = appModel.rowCount(idx);
+        if (n > 0) for (let i = 0; i < n; ++i) callback(appModel.index(i, 0, idx));
+        else callback(idx);
+    }
+
+    // ---- search: KRunner's model and settings
+    Milou.ResultsModel {
+        id: search
+        queryString: root.open ? root.text : ""
+        limit: 15 // as in KRunner
+    }
+
+    // ---- all apps, by menu category
+    Kicker.RootModel {
+        id: allApps
+        autoPopulate: false
+        appletInterface: root
+        flat: true
+        sorted: true
+        showSeparators: false
+        showTopLevelItems: false
+        showAllApps: false
+        showRecentApps: false
+        showRecentDocs: false
+        showPowerSession: false
+        showFavoritesPlaceholder: false
+    }
+
+    // ---- app actions (jump list, recent files, edit, uninstall) for menus
+    Kicker.SimpleFavoritesModel { id: appEntry }
+    Instantiator {
+        model: appEntry
+        delegate: QtObject {
+            required property var model
+            Component.onCompleted: root.entryReady(model.actionList || [])
         }
     }
-    property var menuRow: null
-    property bool menuPinned: false
-    function openMenu(row) {
-        menuRow = row;
-        menuPinned = appModel.launcherPosition(row.model.LauncherUrlWithoutIcon) >= 0;
-        exec.connectSource("sh '" + actionsScript + "' '" + row.model.LauncherUrlWithoutIcon + "'");
+    property var pendingMenu: null
+    function withAppActions(desktopId, fn) {
+        pendingMenu = fn;
+        appEntry.favorites = [];
+        if (!desktopId) { entryReady([]); return; }
+        appEntry.favorites = [desktopId];
     }
-    function showMenu(acts) {
-        const items = acts.map(a => ({ id: "action", text: a.name, cmd: a.cmd, icon: "", separator: false }));
-        if (items.length) items.push({ id: "", text: "", icon: "", separator: true });
-        items.push({ id: "new", text: i18n("New window"), icon: "window-new-symbolic", separator: false });
-        items.push({ id: "pin", text: menuPinned ? i18n("Unpin") : i18n("Pin to rail"), icon: menuPinned ? "window-unpin-symbolic" : "pin-symbolic", separator: false });
-        if (menuRow.running) {
-            items.push({ id: "", text: "", icon: "", separator: true });
-            items.push({ id: "close", text: i18n("Close"), icon: "window-close-symbolic", separator: false });
+    function entryReady(actions) {
+        const fn = pendingMenu;
+        pendingMenu = null;
+        if (fn) fn(actions);
+    }
+    function triggerAppAction(a) {
+        appEntry.trigger(0, a.actionId, a.actionArgument);
+        root.open = false;
+    }
+
+    // right-click on a running or pinned row
+    function openTaskMenu(row) {
+        const app = row.model.AppId || "";
+        withAppActions(app ? (app.endsWith(".desktop") ? app : app + ".desktop") : "", actions => {
+            const m = taskMenuComponent.createObject(root, { r: root, modelIndex: appModel.makeModelIndex(row.index), appActions: actions, visualParent: row });
+            m.show();
+        });
+    }
+    Component { id: taskMenuComponent; TaskMenu {} }
+
+    // right-click on a search result or an app in the list: pin, the match's actions, then the app's own
+    function openAppMenu(visualParent, launcher, kickerActions, triggerKicker, runnerActions, runRunnerAction) {
+        const items = [];
+        if (launcher) items.push({ text: isPinned(launcher) ? i18n("Unpin from Rail") : i18n("Pin to Rail"),
+                                   icon: isPinned(launcher) ? "window-unpin" : "window-pin", run: () => togglePin(launcher) });
+        (runnerActions || []).forEach((a, i) => items.push({ text: a.text, icon: a.iconSource || "", run: () => runRunnerAction(i) }));
+        for (const a of (kickerActions || [])) {
+            if (a.type === "separator") { items.push({ separator: true }); continue; }
+            if (a.type === "title") { items.push({ separator: true }); items.push({ text: a.text, section: true }); continue; }
+            items.push({ text: a.text, icon: a.icon || "", run: () => triggerKicker(a) });
         }
-        menu.model = items;
-        menu.visualParent = menuRow;
-        menu.openRelative();
+        // no leading, trailing or doubled separators
+        const clean = items.filter((it, i, all) => !(it.separator && (i === 0 || i === all.length - 1 || all[i + 1].separator || all[i + 1].section && i === 0)));
+        if (!clean.length) return;
+        const m = actionMenuComponent.createObject(root, { visualParent: visualParent });
+        m.fill(clean);
+        m.openRelative();
     }
-    PlasmaExtras.ModelContextMenu {
-        id: menu
-        onClicked: m => {
-            const idx = appModel.makeModelIndex(root.menuRow.index);
-            switch (m.id) {
-            case "action": exec.connectSource(m.cmd); root.open = false; break;
-            case "new": appModel.requestNewInstance(idx); root.open = false; break;
-            case "pin":
-                if (root.menuPinned) appModel.requestRemoveLauncher(root.menuRow.model.LauncherUrlWithoutIcon);
-                else appModel.requestAddLauncher(root.menuRow.model.LauncherUrl);
-                break;
-            case "close": appModel.requestClose(idx); break;
+    Component {
+        id: actionMenuComponent
+        PlasmaExtras.Menu {
+            id: am
+            placement: PlasmaExtras.Menu.RightPosedTopAlignedPopup
+            onStatusChanged: if (status === PlasmaExtras.Menu.Closed) am.destroy()
+            function fill(items) {
+                for (const it of items) {
+                    const mi = Qt.createQmlObject(`import org.kde.plasma.extras as PlasmaExtras
+                        PlasmaExtras.MenuItem {}`, am);
+                    if (it.separator) mi.separator = true;
+                    else if (it.section) { mi.section = true; mi.text = it.text; }
+                    else {
+                        mi.text = it.text;
+                        mi.icon = it.icon;
+                        mi.clicked.connect(it.run);
+                    }
+                    am.addMenuItem(mi);
+                }
             }
         }
     }
 
-    function run(cmd) {
-        exec.connectSource(cmd);
-        root.open = false;
-    }
+    // ---- session
+    Sessions.SessionManagement { id: session }
+    KCoreAddons.KUser { id: kuser }
+    Kicker.SimpleFavoritesModel { id: settingsApp; favorites: ["systemsettings.desktop"] }
+
     function openApp(i, running, active, group) {
         const idx = appModel.makeModelIndex(i);
         if (!running) appModel.requestNewInstance(idx);
@@ -195,6 +264,13 @@ PlasmoidItem {
         mainItem: Drawer {}
     }
 
+    component SectionLabel: Text {
+        leftPadding: 10; topPadding: 12; bottomPadding: 4
+        color: Kirigami.Theme.textColor; opacity: 0.6
+        font.pixelSize: 12; font.weight: Font.Bold
+        elide: Text.ElideRight
+    }
+
     component Drawer: Item {
         id: drawer
         width: root.drawerW
@@ -207,8 +283,11 @@ PlasmoidItem {
             target: root
             function onOpenChanged() {
                 if (root.open) {
-                    search.text = "";
-                    search.forceActiveFocus();
+                    field.text = "";
+                    results.currentIndex = 0;
+                    if (Plasmoid.configuration.showAllApps && allApps.count === 0) allApps.refresh();
+                    field.forceActiveFocus();
+                    idle.contentY = 0;
                 }
             }
         }
@@ -219,19 +298,119 @@ PlasmoidItem {
             spacing: 2
 
             Kirigami.SearchField {
-                id: search
+                id: field
                 Layout.fillWidth: true
                 Layout.bottomMargin: 6
-                placeholderText: i18n("Search apps and files")
+                placeholderText: i18n("Search")
                 autoAccept: false
-                onTextChanged: root.text = text
-                onAccepted: if (runner.count > 0 && runner.modelForRow(0).count > 0) {
-                    runner.modelForRow(0).trigger(0, "", null);
-                    root.open = false;
+                onTextChanged: { root.text = text; results.currentIndex = 0; }
+                Keys.onDownPressed: results.incrementCurrentIndex()
+                Keys.onUpPressed: results.decrementCurrentIndex()
+                onAccepted: results.runCurrent()
+            }
+
+            // ---- searching: KRunner results, grouped under their category
+            ListView {
+                id: results
+                visible: drawer.searching
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                highlightMoveDuration: 0
+                model: search
+                spacing: 2
+                section.property: "category"
+                section.criteria: ViewSection.FullString
+                section.delegate: SectionLabel {
+                    required property string section
+                    width: ListView.view.width
+                    text: section
+                }
+                function runCurrent() {
+                    if (count === 0) return;
+                    if (search.run(search.index(Math.max(0, currentIndex), 0))) root.open = false;
+                }
+                function runAction(row, i) {
+                    if (search.runAction(search.index(row, 0), i)) root.open = false;
+                }
+                delegate: Item {
+                    id: res
+                    required property int index
+                    required property var model
+                    readonly property var urls: model.urls || []
+                    readonly property string launcher: urls.length && urls[0].toString().endsWith(".desktop") ? root.launcherFor(urls[0]) : ""
+                    width: ListView.view.width
+                    height: 44
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 12
+                        color: Kirigami.Theme.textColor
+                        opacity: rh.hovered ? 0.1 : res.ListView.isCurrentItem ? 0.07 : 0
+                    }
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 10; anchors.rightMargin: 6
+                        spacing: 12
+                        Kirigami.Icon { source: res.model.decoration; Layout.preferredWidth: 24; Layout.preferredHeight: 24 }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+                            Text {
+                                Layout.fillWidth: true
+                                text: res.model.display || ""; elide: Text.ElideRight
+                                textFormat: res.model.multiLine ? Text.StyledText : Text.PlainText
+                                color: Kirigami.Theme.textColor; font.pixelSize: 14
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                visible: text.length > 0
+                                text: res.model.subtext || ""; elide: Text.ElideRight
+                                color: Kirigami.Theme.textColor; opacity: 0.6; font.pixelSize: 11
+                            }
+                        }
+                        Repeater { // the match's own actions, as KRunner shows them
+                            model: rh.hovered || res.ListView.isCurrentItem ? res.model.actions || [] : []
+                            delegate: Item {
+                                id: act
+                                required property var modelData
+                                required property int index
+                                Layout.preferredWidth: 28; Layout.preferredHeight: 28
+                                Rectangle { anchors.fill: parent; radius: 8; color: Kirigami.Theme.textColor; opacity: ab.hovered ? 0.12 : 0 }
+                                Kirigami.Icon { anchors.centerIn: parent; width: 16; height: 16; source: act.modelData.iconSource || "" }
+                                HoverHandler { id: ab }
+                                TapHandler { onTapped: results.runAction(res.index, act.index) }
+                                PlasmaCore.ToolTipArea { anchors.fill: parent; mainText: act.modelData.text || "" }
+                            }
+                        }
+                    }
+                    HoverHandler { id: rh }
+                    TapHandler {
+                        onTapped: if (search.run(search.index(res.index, 0))) root.open = false
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.RightButton
+                        onClicked: {
+                            const actions = res.model.actions || [];
+                            const run = i => results.runAction(res.index, i);
+                            if (res.launcher) {
+                                const file = res.urls[0].toString();
+                                root.withAppActions(file.substring(file.lastIndexOf("/") + 1),
+                                    k => root.openAppMenu(res, res.launcher, k, root.triggerAppAction, actions, run));
+                            } else root.openAppMenu(res, "", [], null, actions, run);
+                        }
+                    }
+                }
+                Text {
+                    anchors.centerIn: parent
+                    visible: results.count === 0 && !search.querying
+                    text: i18n("No results")
+                    color: Kirigami.Theme.textColor; opacity: 0.6; font.pixelSize: 13
                 }
             }
 
-            // ---- idle: running, then pinned
+            // ---- idle: running, pinned, all apps
             Flickable {
                 id: idle
                 visible: !drawer.searching
@@ -250,15 +429,9 @@ PlasmoidItem {
                     Column {
                         Layout.fillWidth: true
                         Layout.row: Plasmoid.configuration.runningFirst ? 0 : 1
-                        visible: Plasmoid.configuration.showRunning
+                        visible: Plasmoid.configuration.showRunning && runningCount.n > 0
                         spacing: 2
-                        Text {
-                            text: i18n("Running")
-                            visible: runningCount.n > 0
-                            leftPadding: 10; topPadding: 6; bottomPadding: 2
-                            color: Kirigami.Theme.textColor; opacity: 0.6
-                            font.pixelSize: 12; font.weight: Font.Bold
-                        }
+                        SectionLabel { text: i18n("Running"); topPadding: 6 }
                         Repeater {
                             model: appModel
                             delegate: AppRow { run: true }
@@ -267,73 +440,64 @@ PlasmoidItem {
                     Column {
                         Layout.fillWidth: true
                         Layout.row: Plasmoid.configuration.runningFirst ? 1 : 0
-                        visible: Plasmoid.configuration.showPinned
+                        visible: Plasmoid.configuration.showPinned && pinnedCount.n > 0
                         spacing: 2
-                        Text {
-                            text: i18n("Pinned")
-                            visible: pinnedCount.n > 0
-                            leftPadding: 10; topPadding: 14; bottomPadding: 2
-                            color: Kirigami.Theme.textColor; opacity: 0.6
-                            font.pixelSize: 12; font.weight: Font.Bold
-                        }
+                        SectionLabel { text: i18n("Pinned") }
                         Repeater {
                             model: appModel
                             delegate: AppRow { run: false }
                         }
                     }
-                }
-            }
-
-            // ---- searching: merged runner results
-            ListView {
-                id: results
-                visible: drawer.searching
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-                boundsBehavior: Flickable.StopAtBounds
-                model: runner.count > 0 ? runner.modelForRow(0) : null
-                spacing: 2
-                delegate: Row {
-                    id: res
-                    required property int index
-                    required property var model
-                    width: ListView.view.width
-                    height: 44
-                    Item {
-                        width: parent.width; height: parent.height
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: 12
-                            color: Kirigami.Theme.textColor
-                            opacity: rh.hovered ? 0.1 : res.ListView.isCurrentItem ? 0.07 : 0
-                        }
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 10; anchors.rightMargin: 10
-                            spacing: 12
-                            Kirigami.Icon { source: res.model.decoration; Layout.preferredWidth: 24; Layout.preferredHeight: 24 }
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 0
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: res.model.display; elide: Text.ElideRight
-                                    color: Kirigami.Theme.textColor; font.pixelSize: 14
+                    // every installed app, under its menu category
+                    Column {
+                        Layout.fillWidth: true
+                        Layout.row: 2
+                        visible: Plasmoid.configuration.showAllApps
+                        spacing: 2
+                        Repeater {
+                            model: Plasmoid.configuration.showAllApps ? allApps : null
+                            delegate: Column {
+                                id: cat
+                                required property int index
+                                required property var model
+                                readonly property var apps: allApps.modelForRow(index)
+                                width: parent ? parent.width : 0
+                                spacing: 2
+                                visible: apps !== null && apps.count > 0
+                                SectionLabel { text: cat.model.display || ""; width: parent.width }
+                                Repeater {
+                                    model: cat.apps
+                                    delegate: Item {
+                                        id: app
+                                        required property int index
+                                        required property var model
+                                        readonly property string launcher: model.favoriteId ? "applications:" + model.favoriteId.replace(/^applications:/, "") : ""
+                                        width: cat.width
+                                        height: 40
+                                        Rectangle { anchors.fill: parent; radius: 12; color: Kirigami.Theme.textColor; opacity: apph.hovered ? 0.1 : 0 }
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 10; anchors.rightMargin: 10
+                                            spacing: 12
+                                            Kirigami.Icon { source: app.model.decoration; Layout.preferredWidth: Plasmoid.configuration.iconSize; Layout.preferredHeight: Plasmoid.configuration.iconSize }
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: app.model.display || ""
+                                                elide: Text.ElideRight
+                                                color: Kirigami.Theme.textColor
+                                                font.pixelSize: 14
+                                            }
+                                        }
+                                        HoverHandler { id: apph }
+                                        TapHandler { onTapped: { cat.apps.trigger(app.index, "", null); root.open = false; } }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            acceptedButtons: Qt.RightButton
+                                            onClicked: root.openAppMenu(app, app.launcher, app.model.actionList || [],
+                                                a => { cat.apps.trigger(app.index, a.actionId, a.actionArgument); root.open = false; })
+                                        }
+                                    }
                                 }
-                                Text {
-                                    Layout.fillWidth: true
-                                    visible: text.length > 0
-                                    text: res.model.description || ""; elide: Text.ElideRight
-                                    color: Kirigami.Theme.textColor; opacity: 0.6; font.pixelSize: 11
-                                }
-                            }
-                        }
-                        HoverHandler { id: rh }
-                        TapHandler {
-                            onTapped: {
-                                results.model.trigger(res.index, "", null);
-                                root.open = false;
                             }
                         }
                     }
@@ -354,27 +518,36 @@ PlasmoidItem {
                     color: root.accent
                     Text {
                         anchors.centerIn: parent
-                        text: user.name.length ? user.name[0].toUpperCase() : ""
+                        visible: avatar.status !== Image.Ready
+                        text: kuser.loginName.length ? kuser.loginName[0].toUpperCase() : ""
                         color: Kirigami.Theme.highlightedTextColor
                         font.pixelSize: 15; font.weight: Font.Bold
+                    }
+                    Kirigami.ShadowedImage {
+                        id: avatar
+                        anchors.fill: parent
+                        radius: 16
+                        source: kuser.faceIconUrl
+                        visible: status === Image.Ready
                     }
                 }
                 Item { Layout.fillWidth: true; visible: !Plasmoid.configuration.showUserName }
                 Text {
                     Layout.fillWidth: true
                     visible: Plasmoid.configuration.showUserName
-                    text: user.name
+                    text: kuser.fullName || kuser.loginName
                     elide: Text.ElideRight
                     color: Kirigami.Theme.textColor
                     font.pixelSize: 14; font.weight: Font.DemiBold
                 }
                 Repeater {
                     model: [
-                        { icon: "preferences-system-symbolic", cmd: "systemsettings", on: Plasmoid.configuration.showSettingsButton },
-                        { icon: "system-lock-screen-symbolic", cmd: "loginctl lock-session", on: Plasmoid.configuration.showLockButton },
-                        { icon: "system-shutdown-symbolic", cmd: "qdbus6 org.kde.LogoutPrompt /LogoutPrompt org.kde.LogoutPrompt.promptShutDown", on: Plasmoid.configuration.showPowerButton }
+                        { icon: "preferences-system-symbolic", tip: i18n("System Settings"), act: "settings", on: Plasmoid.configuration.showSettingsButton },
+                        { icon: "system-lock-screen-symbolic", tip: i18n("Lock"), act: "lock", on: Plasmoid.configuration.showLockButton && session.canLock },
+                        { icon: "system-shutdown-symbolic", tip: i18n("Shut Down…"), act: "power", on: Plasmoid.configuration.showPowerButton && session.canShutdown }
                     ].filter(b => b.on)
                     delegate: Item {
+                        id: btnItem
                         required property var modelData
                         Layout.preferredWidth: 32; Layout.preferredHeight: 32
                         Rectangle {
@@ -386,12 +559,22 @@ PlasmoidItem {
                         Kirigami.Icon {
                             anchors.centerIn: parent
                             width: 16; height: 16
-                            source: parent.modelData.icon
+                            source: btnItem.modelData.icon
                             isMask: true
                             color: Kirigami.Theme.textColor
                         }
                         HoverHandler { id: bh }
-                        TapHandler { onTapped: root.run(parent.modelData.cmd) }
+                        PlasmaCore.ToolTipArea { anchors.fill: parent; mainText: btnItem.modelData.tip }
+                        TapHandler {
+                            onTapped: {
+                                root.open = false;
+                                switch (btnItem.modelData.act) {
+                                case "settings": settingsApp.trigger(0, "", null); break;
+                                case "lock": session.lock(); break;
+                                case "power": session.requestShutdown(); break;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -428,6 +611,10 @@ PlasmoidItem {
         readonly property bool running: model.IsWindow === true || model.IsGroupParent === true
         readonly property bool active: model.IsActive === true
         readonly property bool shown: run ? (running && Plasmoid.configuration.showRunning) : (!running && Plasmoid.configuration.showPinned)
+        // TaskMenu asks about audio; the drawer does not track streams
+        readonly property bool hasAudioStream: false
+        readonly property bool muted: false
+        function toggleMuted() {}
         visible: shown
         width: parent ? parent.width : 0
         height: shown ? 44 : 0
@@ -467,7 +654,7 @@ PlasmoidItem {
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.RightButton
-            onClicked: root.openMenu(row)
+            onClicked: root.openTaskMenu(row)
         }
         TapHandler {
             onTapped: root.openApp(row.index, row.running, row.active, row.model.IsGroupParent === true)
