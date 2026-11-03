@@ -287,18 +287,23 @@ PlasmoidItem {
     }
     onMaximizedChanged: lengthTimer.restart()
     function panelScript(body) {
-        DBus.SessionBus.asyncCall({ service: "org.kde.plasmashell", path: "/PlasmaShell", iface: "org.kde.PlasmaShell",
+        return DBus.SessionBus.asyncCall({ service: "org.kde.plasmashell", path: "/PlasmaShell", iface: "org.kde.PlasmaShell",
             member: "evaluateScript", signature: "(s)",
             arguments: ["var p = panels().filter(function (x) { return x.id == " + Plasmoid.containment.id + "; })[0]; if (p) { " + body + " }"] });
     }
-    // The panel grows to full height and shrinks back over a short tween; Plasma itself only jumps
+
+    // ---- full height while a window is maximized. The panel's own settings stay in charge: the rail reads
+    // the length you set before it grows and puts exactly that back, and stands down in edit mode and
+    // while the panel floats (Plasma then handles maximized windows itself).
+    readonly property bool editMode: Plasmoid.containment && Plasmoid.containment.corona ? Plasmoid.containment.corona.editMode === true : false
+    property var rest: null          // the panel's length settings while the rail is grown
     property real panelLength: 0
     property int sentLength: 0
     function setPanelLength(len) {
         len = Math.round(len);
         if (len === sentLength) return;
         sentLength = len;
-        panelScript('p.lengthMode = "custom"; p.alignment = "center"; p.minimumLength = ' + len + '; p.maximumLength = ' + len + ';');
+        panelScript('p.lengthMode = "custom"; p.minimumLength = ' + len + '; p.maximumLength = ' + len + ';');
     }
     onPanelLengthChanged: if (lengthAnim.running) setPanelLength(panelLength)
     NumberAnimation {
@@ -307,24 +312,67 @@ PlasmoidItem {
         property: "panelLength"
         duration: Kirigami.Units.longDuration
         easing.type: Easing.OutCubic
-        onFinished: root.setPanelLength(root.panelLength)
+        onFinished: {
+            root.setPanelLength(root.panelLength);
+            if (!root.shouldGrow && root.rest) root.putBack();
+        }
+    }
+    readonly property bool shouldGrow: maximized && Plasmoid.configuration.fillWhenMaximized && !editMode
+    function putBack() {
+        const r = rest;
+        rest = null;
+        sentLength = 0;
+        panelScript('p.lengthMode = "' + r.mode + '"; p.alignment = "' + r.alignment + '"; p.minimumLength = ' + r.min
+                    + '; p.maximumLength = ' + r.max + ';');
+    }
+    function grow() {
+        const reply = panelScript('print(JSON.stringify({ mode: p.lengthMode, alignment: p.alignment, min: p.minimumLength, '
+                                  + 'max: p.maximumLength, len: p.length, floating: p.floating }));');
+        reply.finished.connect(() => {
+            if (reply.isError || !root.shouldGrow || root.rest) return;
+            let st;
+            try { st = JSON.parse(String(reply.value).trim()); } catch (e) { return; }
+            // the visible length: the custom maximum, or the content for "fit"
+            st.len = st.mode === "custom" ? Math.min(st.max, Screen.height) : st.len;
+            if (st.floating || st.mode === "fill" || st.len >= Screen.height) return;
+            root.rest = st;
+            root.sentLength = st.len;
+            panelScript('p.alignment = "center";');
+            root.animateLength(st.len, Screen.height);
+        });
+    }
+    function animateLength(from, to) {
+        lengthAnim.stop();
+        lengthAnim.from = from;
+        lengthAnim.to = to;
+        lengthAnim.start();
     }
     Timer {
         id: lengthTimer
         interval: 150 // let a maximize, restore or desktop switch settle first
         onTriggered: {
-            if (!Plasmoid.configuration.fillWhenMaximized) return;
-            const full = Screen.height, inset = Screen.height - 32;
-            const from = root.sentLength > 0 ? root.sentLength : (root.maximized ? inset : full);
-            const to = root.maximized ? full : inset;
-            if (from === to) { root.setPanelLength(to); return; }
-            lengthAnim.stop();
-            lengthAnim.from = from;
-            lengthAnim.to = to;
-            lengthAnim.start();
+            if (root.shouldGrow && !root.rest) root.grow();
+            else if (!root.shouldGrow && root.rest) {
+                if (root.editMode) { lengthAnim.stop(); root.putBack(); } // show the real settings right away
+                else root.animateLength(root.sentLength || Screen.height, root.rest.len);
+            }
         }
     }
-    Component.onCompleted: { recountMaximized(); stackDesktops(); }
+    onShouldGrowChanged: lengthTimer.restart()
+
+    // ---- the rail lives on the left or right edge; a move to the top or bottom is sent back to its side
+    property int side: PlasmaCore.Types.LeftEdge
+    function keepSide() {
+        const loc = Plasmoid.location;
+        if (loc === PlasmaCore.Types.LeftEdge || loc === PlasmaCore.Types.RightEdge) side = loc;
+        else if (loc === PlasmaCore.Types.TopEdge || loc === PlasmaCore.Types.BottomEdge)
+            panelScript('p.location = "' + (side === PlasmaCore.Types.RightEdge ? "right" : "left") + '";');
+    }
+    Connections {
+        target: Plasmoid
+        function onLocationChanged() { Qt.callLater(root.keepSide) }
+    }
+    Component.onCompleted: { recountMaximized(); stackDesktops(); keepSide(); }
 
     function currentIndex() {
         return vdi.desktopIds.indexOf(vdi.currentDesktop);
