@@ -14,6 +14,34 @@ PlasmoidItem {
     toolTipMainText: i18n("Notifications")
     toolTipSubText: dnd ? i18n("Do Not Disturb is on") : unread > 0 ? i18np("%1 unread", "%1 unread", unread) : i18n("No new notifications")
 
+    // KDE's notifications applet has to stay loaded in the tray because it draws the popups, but this
+    // widget replaces its icon. Hidden is the one status the tray never shows, not even behind the chevron.
+    property var stockApplet: null
+    function findStockApplet() {
+        const c = Plasmoid.containment;
+        for (const a of (c ? c.applets : [])) {
+            for (const t of (a.pluginName === "org.kde.plasma.systemtray" && a.applets ? a.applets : [])) {
+                if (t.pluginName === "org.kde.plasma.notifications") { stockApplet = t; hideStockApplet(); return; }
+            }
+        }
+    }
+    function hideStockApplet() {
+        if (stockApplet && stockApplet.status !== PlasmaCore.Types.HiddenStatus) stockApplet.status = PlasmaCore.Types.HiddenStatus;
+    }
+    Connections {
+        target: root.stockApplet
+        // its own status binding comes back whenever it re-evaluates
+        function onStatusChanged() { Qt.callLater(root.hideStockApplet) }
+    }
+    Connections {
+        target: Plasmoid.containment
+        function onAppletsChanged() { root.findStockApplet() }
+    }
+    Timer { // the tray loads its items after the panel
+        interval: 2000; running: true; repeat: true
+        onTriggered: { root.findStockApplet(); if (root.stockApplet) running = false; }
+    }
+
     readonly property bool dark: Kirigami.Theme.textColor.hsvValue > 0.5
     readonly property color fill: dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.38)
     readonly property color fillHover: dark ? Qt.rgba(1, 1, 1, 0.13) : Qt.rgba(0.2, 0.28, 0.4, 0.2)
