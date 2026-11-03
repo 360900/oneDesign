@@ -27,11 +27,13 @@ STATE = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "onedesi
 
 # files touched by apply, relative to CONFIG
 TOUCHED = ["kdeglobals", "kwinrc", "plasmarc", "ksplashrc", "kcminputrc", "konsolerc",
-           "plasma-org.kde.plasma.desktop-appletsrc", "plasmashellrc", "Kvantum/kvantum.kvconfig",
+           "plasma-org.kde.plasma.desktop-appletsrc", "plasma-org.onedesign.desktop-appletsrc",
+           "plasmashellrc", "Kvantum/kvantum.kvconfig",
            "gtk-3.0/gtk.css", "gtk-4.0/gtk.css"]
-# lock screen: copy of the system shell package with our LockScreenUi.qml (see lockscreen/sync.sh)
-SHELL_COPY = DATA / "plasma/shells/org.kde.plasma.desktop"
-LOCK_SYNC = "plasma-workspace/env/onedesign-lockscreen.sh"
+# The lock screen comes from our Plasma shell package, which falls back to KDE's for everything else
+SHELL, KDE_SHELL = "org.onedesign.desktop", "org.kde.plasma.desktop"
+# older installs kept a full copy of KDE's shell package, refreshed by a login script
+LEGACY = (DATA / "plasma/shells" / KDE_SHELL, CONFIG / "plasma-workspace/env/onedesign-lockscreen.sh", DATA / "onedesign")
 GTK_BEGIN, GTK_END = "/* oneDesign:begin */", "/* oneDesign:end */"
 
 
@@ -88,7 +90,7 @@ def cmd_build(a):
 
 def cmd_install(a):
     manifest()
-    for top in ("share/color-schemes", "share/aurorae/themes", "share/plasma/desktoptheme",
+    for top in ("share/color-schemes", "share/aurorae/themes", "share/plasma/desktoptheme", "share/plasma/shells",
                 "share/plasma/look-and-feel", "share/wallpapers", "share/konsole", "share/fonts", "share/icons"):
         for item in (BUILD / top).iterdir():
             dst = DATA / item.relative_to(BUILD / "share")
@@ -98,12 +100,36 @@ def cmd_install(a):
     for src, dst in files:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
-    run("bash", str(CONFIG / LOCK_SYNC), quiet=True)
     STATE.mkdir(parents=True, exist_ok=True)
     (STATE / "installed.txt").write_text("\n".join(str(d) for _, d in files) + "\n")
     if shutil.which("fc-cache"):
         run("fc-cache", "-f", str(DATA / "fonts" / "oneDesign"), check=False)
     print(f"installed {len(files)} files")
+
+
+def remove_legacy_lockscreen():
+    copy, script, data = LEGACY
+    if (copy / ".onedesign").exists():  # never a shell package the user put there
+        shutil.rmtree(copy)
+    script.unlink(missing_ok=True)
+    shutil.rmtree(data, ignore_errors=True)
+
+
+def current_shell():
+    return kread("plasmashellrc", "Shell", "ShellPackage") or KDE_SHELL
+
+
+def use_shell(shell):
+    """Point plasmashell and the lock screen at a shell package. The panels and desktop live in a
+    per-shell file, so they are carried over to the new one."""
+    old = current_shell()
+    if old == shell:
+        return
+    src, dst = CONFIG / f"plasma-{old}-appletsrc", CONFIG / f"plasma-{shell}-appletsrc"
+    if src.exists():
+        shutil.copy2(src, dst)
+    kwrite("plasmashellrc", "Shell", "ShellPackage", shell)
+    remove_legacy_lockscreen()
 
 
 def backup():
@@ -174,10 +200,9 @@ def hide_running_tray_items(m):
     ids = detect_tray_ids()
     line = "var trayHiddenExtra = " + json.dumps(ids) + ";"
     for lf in m["lookandfeel"].values():
-        js = DATA / "plasma/look-and-feel" / lf / "contents/layouts/org.kde.plasma.desktop-layout.js"
-        if not js.exists() or "var trayHiddenExtra" not in js.read_text():
-            continue
-        js.write_text(re.sub(r"var trayHiddenExtra = \[.*?\];", lambda _: line, js.read_text()))
+        for js in (DATA / "plasma/look-and-feel" / lf / "contents/layouts").glob("*-layout.js"):
+            if "var trayHiddenExtra" in js.read_text():
+                js.write_text(re.sub(r"var trayHiddenExtra = \[.*?\];", lambda _: line, js.read_text()))
     if ids:
         print("tray items kept behind the chevron:", ", ".join(ids))
 
@@ -185,7 +210,7 @@ def hide_running_tray_items(m):
 def reset_layout_live(lf):
     """Rebuild the panels in the running shell from the installed layout script.
     plasma-apply-lookandfeel does nothing when the same theme is already active, so do it directly."""
-    js = DATA / "plasma/look-and-feel" / lf / "contents/layouts/org.kde.plasma.desktop-layout.js"
+    js = DATA / "plasma/look-and-feel" / lf / f"contents/layouts/{current_shell()}-layout.js"
     if not js.exists() or not shutil.which("qdbus6"):
         return
     script = ("var old = panels(); for (var i = 0; i < old.length; i++) { old[i].remove(); }\n" + js.read_text())
@@ -198,6 +223,7 @@ def restart_shell():
     """Plasmoid QML is only read when the shell starts."""
     import time
     time.sleep(3)  # let the shell write the new layout out first
+    use_shell(SHELL)
     if shutil.which("systemctl") and subprocess.run(["systemctl", "--user", "is-active", "--quiet", "plasma-plasmashell.service"]).returncode == 0:
         run("systemctl", "--user", "restart", "plasma-plasmashell.service", check=False)
     elif shutil.which("kquitapp6") and shutil.which("kstart"):
@@ -242,9 +268,8 @@ def cmd_apply(a):
         kwrite("kdeglobals", "KDE", "LookAndFeelPackage", lf)
         merge_scheme(DATA / "color-schemes" / f"{scheme}.colors")
         if a.layout:
-            p = CONFIG / "plasma-org.kde.plasma.desktop-appletsrc"
-            if p.exists():
-                p.unlink()
+            (CONFIG / f"plasma-{current_shell()}-appletsrc").unlink(missing_ok=True)
+        use_shell(SHELL)
     kwrite("kdeglobals", "KDE", "AutomaticLookAndFeel", "true" if a.mode == "auto" else "false")
     kwrite("kdeglobals", "KDE", "DefaultLightLookAndFeel", m["lookandfeel"]["light"])
     kwrite("kdeglobals", "KDE", "DefaultDarkLookAndFeel", m["lookandfeel"]["dark"])
@@ -300,7 +325,7 @@ def cmd_uninstall(a):
     if not lst.exists():
         sys.exit("nothing installed")
     roots = {DATA / t for t in ("color-schemes", "aurorae/themes", "plasma/desktoptheme", "plasma/look-and-feel",
-                                "wallpapers", "konsole", "fonts", "icons", "plasma/plasmoids")} | {CONFIG / "Kvantum"}
+                                "wallpapers", "konsole", "fonts", "icons", "plasma/plasmoids", "plasma/shells")} | {CONFIG / "Kvantum"}
     roots |= {d / t for d in freecad_dirs() for t in ("Mod", "Gui/Stylesheets")}
     dirs = set()
     for line in lst.read_text().split("\n"):
@@ -316,9 +341,9 @@ def cmd_uninstall(a):
         if d.is_dir() and not any(d.iterdir()):
             d.rmdir()
     lst.unlink()
-    if (SHELL_COPY / ".onedesign").exists():
-        shutil.rmtree(SHELL_COPY)
-    shutil.rmtree(DATA / "onedesign", ignore_errors=True)
+    remove_legacy_lockscreen()
+    if current_shell() == SHELL:
+        use_shell(KDE_SHELL)
     print("removed theme files. Run `one-theme restore` to bring back your previous configs.")
 
 

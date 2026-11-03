@@ -1,6 +1,9 @@
 """Global theme (look-and-feel) packages: defaults, floating topbar + dock layout, splash."""
 import json
 
+# Our Plasma shell package (lock screen only; falls back to KDE's desktop shell)
+SHELL = "org.onedesign.desktop"
+
 LAYOUT = """// oneDesign: floating top bar + floating dock
 var screenGeo = screenGeometry(0);
 
@@ -250,13 +253,14 @@ def build(th, wallpaper="One-Lagoon", shell="bar"):
     """Returns {relative path: text} for share/plasma/look-and-feel/<ident>/."""
     c = th.c
     launchers = ", ".join(f'"{x}"' for x in LAUNCHERS)
+    layout = ((LAYOUT_RAIL if shell == "rail" else LAYOUT).replace("%LAUNCHERS%", launchers)
+              .replace("%TRAY_KNOWN%", ", ".join(f'"{x}"' for x in TRAY_KEEP + TRAY_HIDE))
+              .replace("%TRAY_KEEP%", ", ".join(f'"{x}"' for x in TRAY_KEEP)))
     splash = (SPLASH.replace("%BG%", c["desktop"].hexs).replace("%MARK%", c["accent"].hexs)
               .replace("%ONMARK%", c["onAccent"].hexs).replace("%TRACK%", c["fillStrong"].over(c["desktop"]).hexs))
     return {
         "metadata.json": metadata(th.dark),
         "contents/defaults": defaults(th, wallpaper),
-        "contents/layouts/org.kde.plasma.desktop-layout.js": (LAYOUT_RAIL if shell == "rail" else LAYOUT).replace("%LAUNCHERS%", launchers)
-            .replace("%TRAY_KNOWN%", ", ".join(f'"{x}"' for x in TRAY_KEEP + TRAY_HIDE))
-            .replace("%TRAY_KEEP%", ", ".join(f'"{x}"' for x in TRAY_KEEP)),
+        **{f"contents/layouts/{sh}-layout.js": layout for sh in ("org.kde.plasma.desktop", SHELL)},
         "contents/splash/Splash.qml": splash,
     }

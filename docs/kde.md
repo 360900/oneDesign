@@ -49,6 +49,7 @@ tools/kde_preview.sh dark /tmp/one.png "dolphin"
 | `share/plasma/plasmoids/org.onedesign.clock/` | `clock/` | Rail clock: bold hours over minutes with the date under it |
 | `share/plasma/plasmoids/org.onedesign.notifications/` | `notifications/` | Round bell for the rail with an unread badge. The stock notifications applet stays loaded in the tray because it draws the toasts; this widget keeps it hidden, so it never shows in the tray or behind its chevron. Click opens the history (clear, dismiss, open the default action) with a Do Not Disturb switch; middle click toggles Do Not Disturb |
 | `share/plasma/plasmoids/org.onedesign.quicksettings/` | `quicksettings/` | GNOME-style quick settings menu in the top bar |
+| `share/plasma/shells/org.onedesign.desktop/` | `lockscreen/` | Lock screen. The screen locker loads its UI from the Plasma shell package, so this package holds only the lock screen and falls back to KDE's desktop shell for everything else. `apply` makes it the shell (`plasmashellrc` `[Shell] ShellPackage`) and carries the panels and desktop over to its config file; `restore` and `uninstall` switch back |
 | `share/sddm/themes/one/`, `etc/sddm.conf.d/one.conf` | `sddm.py`, `sddm/Main.qml` | SDDM greeter |
 | `etc/plasmalogin.conf.d/one.conf` | `extras.py` | Plasma Login Manager wallpaper |
 
@@ -78,5 +79,4 @@ on the SDDM greeter to start it; the module's status shows below the field.
 
 - GTK apps get One colors and radii on top of libadwaita / Adwaita-gtk3, not full One widgets.
 - FreeCAD picks up light/dark switching on its next start. Select `One Light` or `One Dark` once under Preferences > General > Preference packs.
-- Lock screen uses the Breeze layout with One style and wallpaper.
 - Cursor stays Breeze. App and file-type icons come from Papirus; less common Papirus folder variants keep Papirus colors.

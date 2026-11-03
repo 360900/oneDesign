@@ -97,13 +97,23 @@ def build(out, accent="blue", wall="lagoon", shell="bar"):
             write(out, f"share/plasma/plasmoids/{ident}/contents/ui/{name}", (HERE / "shared" / name).read_text())
     for rel, data in extras.rail_wallpapers(wall).items():
         write(out, f"share/plasma/plasmoids/org.onedesign.rail/{rel}", data)
-    write(out, "share/onedesign/lockscreen/LockScreenUi.qml", (HERE / "lockscreen/LockScreenUi.qml").read_text())
-    write(out, "config/plasma-workspace/env/onedesign-lockscreen.sh", (HERE / "lockscreen/sync.sh").read_text())
+    # The lock screen comes from a Plasma shell package; ours holds only the lock screen and falls back to
+    # KDE's desktop shell for everything else
+    write(out, f"share/plasma/shells/{lnf.SHELL}/metadata.json", json.dumps({
+        "KPackageStructure": "Plasma/Shell",
+        "KPlugin": {"Authors": [{"Name": "oneDesign"}], "Description": "Plasma desktop with the One lock screen",
+                    "Icon": "user-desktop", "Id": lnf.SHELL, "License": "GPL-2.0-or-later", "Name": "One Desktop"},
+        "X-KDE-ParentApp": "org.kde.plasmashell",
+        "X-Plasma-APIVersion": "2",
+    }, indent=4) + "\n")
+    for f in sorted((HERE / "lockscreen").iterdir()):
+        write(out, f"share/plasma/shells/{lnf.SHELL}/contents/lockscreen/{f.name}", f.read_text())
     write(out, "manifest.json", json.dumps({
         "accent": accent, "wallpaper": wallpaper,
         "kwin": {"blurStrength": max(1, round(resolve("light", accent, wall).tokens["glass"]["blur"] / 6)),
                  "noiseStrength": 2},
         "lookandfeel": {"light": lnf.ident(False), "dark": lnf.ident(True)},
+        "shell": lnf.SHELL,
         "fonts": {"/".join(k): v for k, v in extras.font_settings().items()},
     }, indent=2) + "\n")
     return out
