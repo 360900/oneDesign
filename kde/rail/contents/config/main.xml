@@ -15,7 +15,6 @@
     <entry name="showAddWorkspace" type="Bool"><default>true</default></entry>
     <entry name="showSeparator" type="Bool"><default>true</default></entry>
     <entry name="showApps" type="Bool"><default>true</default></entry>
-    <entry name="showAddApp" type="Bool"><default>true</default></entry>
     <entry name="workspacesFirst" type="Bool"><default>true</default></entry>
     <entry name="tileSize" type="Int"><default>44</default><min>36</min><max>52</max></entry>
     <entry name="iconSize" type="Int"><default>32</default><min>20</min><max>48</max></entry>

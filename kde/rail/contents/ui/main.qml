@@ -4,7 +4,6 @@ import QtQuick.Layouts
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.extras as PlasmaExtras
-import org.kde.plasma.private.kicker as Kicker
 import org.kde.plasma.plasma5support as P5Support
 import org.kde.kirigami as Kirigami
 import org.kde.taskmanager as TaskManager
@@ -75,18 +74,6 @@ PlasmoidItem {
             if (a.pluginName === other && JSON.stringify(a.configuration.launchers) !== JSON.stringify(list))
                 a.configuration.launchers = list;
         }
-    }
-
-    // Searches installed apps for the add dialog
-    Kicker.RunnerModel {
-        id: finder
-        appletInterface: root
-        mergeResults: true
-        query: ""
-    }
-    function pinId(id) {
-        if (!id) return "";
-        return (id.indexOf(":") < 0 && id.indexOf("/") < 0 && id.endsWith(".desktop")) ? "applications:" + id : id;
     }
 
     P5Support.DataSource {
@@ -563,33 +550,6 @@ PlasmoidItem {
                     }
                 }
             }
-
-            // ---- add an app
-            Item {
-                id: addTile
-                Layout.fillWidth: true
-                Layout.preferredHeight: root.tile
-                Layout.row: Plasmoid.configuration.workspacesFirst ? 3 : 1
-                visible: Plasmoid.configuration.showApps && Plasmoid.configuration.showAddApp
-                Rectangle {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: root.tile; height: root.tile
-                    radius: root.tile * 0.26
-                    color: addTap.pressed ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.35)
-                           : appAddHover.hovered ? root.fill : Qt.rgba(root.fill.r, root.fill.g, root.fill.b, 0)
-                    border.width: 1
-                    border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.25)
-                    Kirigami.Icon {
-                        anchors.centerIn: parent
-                        width: 20; height: 20
-                        source: "list-add-symbolic"
-                        color: Kirigami.Theme.textColor
-                        opacity: 0.7
-                    }
-                }
-                HoverHandler { id: appAddHover }
-                TapHandler { id: addTap; onTapped: picker.visible = !picker.visible }
-            }
         }
 
         // A native menu: item popups would be clipped to the narrow panel window
@@ -607,76 +567,6 @@ PlasmoidItem {
                     else appModel.requestAddLauncher(menu.cur.model.LauncherUrl);
                     break;
                 case "close": appModel.requestClose(idx); break;
-                }
-            }
-        }
-
-        PlasmaCore.Dialog {
-            id: picker
-            visualParent: addTile
-            location: PlasmaCore.Types.LeftEdge
-            hideOnWindowDeactivate: true
-            onVisibleChanged: {
-                finder.query = visible ? finderField.text : "";
-                if (visible) { finderField.text = ""; finderField.forceActiveFocus(); }
-            }
-            mainItem: ColumnLayout {
-                width: 300
-                height: 360
-                spacing: 8
-                Kirigami.SearchField {
-                    id: finderField
-                    Layout.fillWidth: true
-                    placeholderText: "Add an app"
-                    autoAccept: false
-                    onTextChanged: finder.query = picker.visible ? text : ""
-                }
-                ListView {
-                    id: hits
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    clip: true
-                    spacing: 2
-                    boundsBehavior: Flickable.StopAtBounds
-                    model: finder.count > 0 ? finder.modelForRow(0) : null
-                    delegate: Item {
-                        id: hit
-                        required property int index
-                        required property var model
-                        width: ListView.view.width
-                        height: 40
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: 10
-                            color: Kirigami.Theme.textColor
-                            opacity: hh.hovered ? 0.1 : 0
-                        }
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 8; anchors.rightMargin: 8
-                            spacing: 10
-                            Kirigami.Icon { source: hit.model.decoration; Layout.preferredWidth: 24; Layout.preferredHeight: 24 }
-                            Text {
-                                Layout.fillWidth: true
-                                text: hit.model.display; elide: Text.ElideRight
-                                color: Kirigami.Theme.textColor; font.pixelSize: 14
-                            }
-                        }
-                        HoverHandler { id: hh }
-                        TapHandler {
-                            onTapped: {
-                                const id = root.pinId(hit.model.favoriteId);
-                                if (id) appModel.requestAddLauncher(id);
-                                picker.visible = false;
-                            }
-                        }
-                    }
-                }
-                Text {
-                    visible: hits.count === 0
-                    Layout.alignment: Qt.AlignHCenter
-                    text: finderField.text.length ? "No apps found" : "Type an app name"
-                    color: Kirigami.Theme.textColor; opacity: 0.6; font.pixelSize: 12
                 }
             }
         }

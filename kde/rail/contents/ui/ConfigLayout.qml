@@ -9,7 +9,6 @@ KCM.SimpleKCM {
     property alias cfg_showAddWorkspace: addWs.checked
     property alias cfg_maxDesktops: maxDesks.value
     property alias cfg_showApps: showApps.checked
-    property alias cfg_showAddApp: addApp.checked
     property alias cfg_showSeparator: sep.checked
     property bool cfg_workspacesFirst
     property int cfg_hideMode
@@ -23,7 +22,6 @@ KCM.SimpleKCM {
     property bool cfg_showAddWorkspaceDefault
     property int cfg_maxDesktopsDefault
     property bool cfg_showAppsDefault
-    property bool cfg_showAddAppDefault
     property bool cfg_showSeparatorDefault
     property bool cfg_workspacesFirstDefault
     property int cfg_tileSizeDefault
@@ -52,7 +50,6 @@ KCM.SimpleKCM {
 
         Item { Kirigami.FormData.isSection: true; Kirigami.FormData.label: i18n("Apps") }
         QQC.CheckBox { id: showApps; text: i18n("Show apps") }
-        QQC.CheckBox { id: addApp; text: i18n("Show the add app button"); enabled: showApps.checked }
         QQC.CheckBox { id: sep; text: i18n("Show a separator between workspaces and apps") }
         QQC.SpinBox { id: tile; Kirigami.FormData.label: i18n("Tile size:"); from: 36; to: 52; enabled: showApps.checked }
         QQC.SpinBox { id: icon; Kirigami.FormData.label: i18n("Icon size:"); from: 20; to: 48; enabled: showApps.checked }
