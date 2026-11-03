@@ -525,7 +525,10 @@ PlasmoidItem {
                             target: null
                             acceptedButtons: Qt.LeftButton
                             xAxis.enabled: false
-                            onActiveChanged: if (active) app.startIndex = app.index
+                            onActiveChanged: {
+                                if (active) app.startIndex = app.index;
+                                else appModel.syncLaunchers(); // move() alone does not touch the launcher list
+                            }
                         }
                         MouseArea { // accepts the click, so Plasma's own panel menu stays closed
                             anchors.fill: parent
