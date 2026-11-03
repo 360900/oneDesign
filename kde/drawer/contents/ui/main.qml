@@ -68,27 +68,35 @@ PlasmoidItem {
             if (JSON.stringify(l) !== JSON.stringify(Plasmoid.configuration.launchers)) Plasmoid.configuration.launchers = l;
         }
     }
-    // Rail and drawer share one pinned list: any change here reaches the rail live
-    Connections {
-        target: Plasmoid.configuration
-        function onLaunchersChanged() { root.shareLaunchers(Plasmoid.configuration.launchers, "org.onedesign.rail") }
-    }
-    function shareLaunchers(list, other) {
-        const c = Plasmoid.containment;
-        for (const a of (c ? c.applets : [])) {
-            if (a.pluginName === other && JSON.stringify(a.configuration.launchers) !== JSON.stringify(list))
-                a.configuration.launchers = list;
-        }
-    }
     // A desktop file url as a launcher entry: applications:<name> when it lives in an applications dir
     function launcherFor(desktopUrl) {
         const u = desktopUrl.toString();
         return u.indexOf("/applications/") >= 0 ? "applications:" + u.substring(u.lastIndexOf("/") + 1) : u;
     }
+    // The drawer and the rail keep their own pinned lists
+    readonly property string pinText: i18n("Pin to Drawer")
+    readonly property string unpinText: i18n("Unpin from Drawer")
     function isPinned(launcher) { return appModel.launcherPosition(launcher) >= 0; }
     function togglePin(launcher) {
         if (isPinned(launcher)) appModel.requestRemoveLauncher(launcher);
         else appModel.requestAddLauncher(launcher);
+    }
+    // the rail in the same panel, if any
+    function railApplet() {
+        const c = Plasmoid.containment;
+        return (c ? c.applets : []).find(a => a.pluginName === "org.onedesign.rail") || null;
+    }
+    function isOnRail(launcher) {
+        const rail = railApplet();
+        return !!rail && (rail.configuration.launchers || []).indexOf(launcher) >= 0;
+    }
+    function toggleRailPin(launcher) {
+        const rail = railApplet();
+        if (!rail) return;
+        const list = (rail.configuration.launchers || []).slice();
+        const i = list.indexOf(launcher);
+        if (i >= 0) list.splice(i, 1); else list.push(launcher);
+        rail.configuration.launchers = list;
     }
 
     // ---- TaskMenu helpers (same menu as the rail)
@@ -164,8 +172,12 @@ PlasmoidItem {
     // right-click on a search result or an app in the list: pin, the match's actions, then the app's own
     function openAppMenu(visualParent, launcher, kickerActions, triggerKicker, runnerActions, runRunnerAction) {
         const items = [];
-        if (launcher) items.push({ text: isPinned(launcher) ? i18n("Unpin from Rail") : i18n("Pin to Rail"),
-                                   icon: isPinned(launcher) ? "window-unpin" : "window-pin", run: () => togglePin(launcher) });
+        if (launcher) {
+            items.push({ text: isPinned(launcher) ? unpinText : pinText,
+                         icon: isPinned(launcher) ? "window-unpin" : "window-pin", run: () => togglePin(launcher) });
+            if (railApplet()) items.push({ text: isOnRail(launcher) ? i18n("Unpin from Rail") : i18n("Pin to Rail"),
+                                           icon: isOnRail(launcher) ? "window-unpin" : "window-pin", run: () => toggleRailPin(launcher) });
+        }
         (runnerActions || []).forEach((a, i) => items.push({ text: a.text, icon: a.iconSource || "", run: () => runRunnerAction(i) }));
         for (const a of (kickerActions || [])) {
             if (a.type === "separator") { items.push({ separator: true }); continue; }

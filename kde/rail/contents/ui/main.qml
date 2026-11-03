@@ -94,18 +94,8 @@ PlasmoidItem {
             if (JSON.stringify(l) !== JSON.stringify(Plasmoid.configuration.launchers)) Plasmoid.configuration.launchers = l;
         }
     }
-    // Rail and drawer share one pinned list: any change here (rail, settings page) reaches the drawer live
-    Connections {
-        target: Plasmoid.configuration
-        function onLaunchersChanged() { root.shareLaunchers(Plasmoid.configuration.launchers, "org.onedesign.drawer") }
-    }
-    function shareLaunchers(list, other) {
-        const c = Plasmoid.containment;
-        for (const a of (c ? c.applets : [])) {
-            if (a.pluginName === other && JSON.stringify(a.configuration.launchers) !== JSON.stringify(list))
-                a.configuration.launchers = list;
-        }
-    }
+    readonly property string pinText: i18n("Pin to Rail")
+    readonly property string unpinText: i18n("Unpin from Rail")
 
     // ---- helpers shared with the task items, after KDE's TaskTools.js
     function foreachChildTask(callback, idx) {

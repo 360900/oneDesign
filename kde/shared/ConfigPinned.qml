@@ -72,7 +72,7 @@ KCM.SimpleKCM {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             opacity: 0.7
-            text: i18n("You can also pin from the app drawer or the rail: right-click an app. Drag apps on the rail to reorder them.")
+            text: i18n("You can also right-click an app to pin or unpin it. The rail and the drawer keep separate lists. Drag apps on the rail to reorder them.")
         }
     }
 }

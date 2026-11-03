@@ -275,7 +275,7 @@ PlasmaExtras.Menu {
         readonly property bool pinned: menu.tasksModel.launcherPosition(launcher) >= 0
         visible: !menu.get(TaskManager.AbstractTasksModel.IsStartup) && Plasmoid.immutability !== PlasmaCore.Types.SystemImmutable
         enabled: launcher.toString() !== ""
-        text: pinned ? i18n("Unpin from Rail") : i18n("Pin to Rail")
+        text: pinned ? menu.r.unpinText : menu.r.pinText
         icon: pinned ? "window-unpin" : "window-pin"
         onClicked: pinned ? menu.tasksModel.requestRemoveLauncher(launcher)
                           : menu.tasksModel.requestAddLauncher(menu.get(TaskManager.AbstractTasksModel.LauncherUrl))
