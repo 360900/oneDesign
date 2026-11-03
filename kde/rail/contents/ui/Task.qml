@@ -198,6 +198,7 @@ Item {
             }
         }
         Rectangle { // plays audio: a speaker badge on the tile corner; click mutes
+            id: audioBadge
             visible: Plasmoid.configuration.indicateAudioStreams && task.hasAudioStream && (task.playingAudio || task.muted)
             x: parent.width / 2 + task.r.tile / 2 - width + 3
             y: parent.height / 2 - task.r.tile / 2 - 3
@@ -214,6 +215,7 @@ Item {
                 isMask: true
             }
             TapHandler {
+                id: muteTap
                 enabled: Plasmoid.configuration.interactiveMute
                 onTapped: task.toggleMuted()
             }
@@ -254,7 +256,11 @@ Item {
     TapHandler {
         id: tap
         acceptedButtons: Qt.LeftButton
-        onTapped: (point, button) => task.activate(point.modifiers)
+        onTapped: (point, button) => {
+            // the tile's handler sees the badge's tap too; muting must not activate
+            if (audioBadge.visible && muteTap.enabled && audioBadge.contains(audioBadge.mapFromItem(task, point.position))) return;
+            task.activate(point.modifiers);
+        }
     }
     TapHandler {
         acceptedButtons: Qt.MiddleButton
