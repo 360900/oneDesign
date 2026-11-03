@@ -18,14 +18,14 @@ KCM.SimpleKCM {
         set(l);
     }
 
-    // Launchers only: no window matches the made-up desktop, so only the pinned entries remain
+    // Resolves names and icons for the pinned urls. A running pinned app replaces its launcher row,
+    // so rows are matched to the list by launcher position; apps that are only running have none.
     TaskManager.TasksModel {
         id: pins
-        filterByVirtualDesktop: true
-        virtualDesktop: "none"
-        groupMode: TaskManager.TasksModel.GroupDisabled
+        groupMode: TaskManager.TasksModel.GroupApplications
         sortMode: TaskManager.TasksModel.SortManual
-        separateLaunchers: true
+        separateLaunchers: false
+        launchInPlace: true
         launcherList: page.cfg_launchers
     }
 
@@ -43,22 +43,23 @@ KCM.SimpleKCM {
             model: pins
             delegate: RowLayout {
                 id: row
-                required property int index
                 required property var model
+                readonly property int pos: pins.launcherPosition(model.LauncherUrlWithoutIcon)
+                visible: pos >= 0
                 Layout.fillWidth: true
                 Kirigami.Icon { source: row.model.decoration; Layout.preferredWidth: 24; Layout.preferredHeight: 24 }
                 QQC.Label { Layout.fillWidth: true; text: row.model.AppName || row.model.display; elide: Text.ElideRight }
                 QQC.ToolButton {
-                    icon.name: "go-up-symbolic"; enabled: row.index > 0
-                    onClicked: page.move(row.index, row.index - 1)
+                    icon.name: "go-up-symbolic"; enabled: row.pos > 0
+                    onClicked: page.move(row.pos, row.pos - 1)
                 }
                 QQC.ToolButton {
-                    icon.name: "go-down-symbolic"; enabled: row.index < pins.count - 1
-                    onClicked: page.move(row.index, row.index + 1)
+                    icon.name: "go-down-symbolic"; enabled: row.pos < page.cfg_launchers.length - 1
+                    onClicked: page.move(row.pos, row.pos + 1)
                 }
                 QQC.ToolButton {
                     icon.name: "edit-delete-symbolic"
-                    onClicked: page.set(page.cfg_launchers.filter((u, i) => i !== row.index))
+                    onClicked: page.set(page.cfg_launchers.filter((u, i) => i !== row.pos))
                 }
             }
         }
@@ -71,7 +72,7 @@ KCM.SimpleKCM {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             opacity: 0.7
-            text: i18n("You can also pin from the rail itself: right-click an app, or use the + tile. Drag apps on the rail to reorder them.")
+            text: i18n("You can also pin from the app drawer or the rail: right-click an app. Drag apps on the rail to reorder them.")
         }
     }
 }
