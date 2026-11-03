@@ -291,15 +291,37 @@ PlasmoidItem {
             member: "evaluateScript", signature: "(s)",
             arguments: ["var p = panels().filter(function (x) { return x.id == " + Plasmoid.containment.id + "; })[0]; if (p) { " + body + " }"] });
     }
+    // The panel grows to full height and shrinks back over a short tween; Plasma itself only jumps
+    property real panelLength: 0
+    property int sentLength: 0
+    function setPanelLength(len) {
+        len = Math.round(len);
+        if (len === sentLength) return;
+        sentLength = len;
+        panelScript('p.lengthMode = "custom"; p.alignment = "center"; p.minimumLength = ' + len + '; p.maximumLength = ' + len + ';');
+    }
+    onPanelLengthChanged: if (lengthAnim.running) setPanelLength(panelLength)
+    NumberAnimation {
+        id: lengthAnim
+        target: root
+        property: "panelLength"
+        duration: Kirigami.Units.longDuration
+        easing.type: Easing.OutCubic
+        onFinished: root.setPanelLength(root.panelLength)
+    }
     Timer {
         id: lengthTimer
-        interval: 250
+        interval: 150 // let a maximize, restore or desktop switch settle first
         onTriggered: {
             if (!Plasmoid.configuration.fillWhenMaximized) return;
-            const inset = Screen.height - 32;
-            root.panelScript(root.maximized
-                ? 'p.lengthMode = "fill";'
-                : 'p.lengthMode = "custom"; p.alignment = "center"; p.minimumLength = ' + inset + '; p.maximumLength = ' + inset + ';');
+            const full = Screen.height, inset = Screen.height - 32;
+            const from = root.sentLength > 0 ? root.sentLength : (root.maximized ? inset : full);
+            const to = root.maximized ? full : inset;
+            if (from === to) { root.setPanelLength(to); return; }
+            lengthAnim.stop();
+            lengthAnim.from = from;
+            lengthAnim.to = to;
+            lengthAnim.start();
         }
     }
     Component.onCompleted: { recountMaximized(); stackDesktops(); }
