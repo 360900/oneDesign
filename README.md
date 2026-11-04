@@ -62,7 +62,8 @@ Static renders of every scene and mode are in `renders/`.
 Inter (OFL), Geist Mono (OFL), Adwaita icons (CC-BY-SA / LGPL),
 Fluent UI System Icons (MIT), Material Symbols (Apache 2.0),
 Text editor and image viewer app icons from Papirus (GPL-3.0).
+Wave wallpaper from CachyOS (GPL-1.0-only).
 
 ## License
 
-GPL-3.0. Bundled fonts and icons keep their own licenses.
+GPL-3.0. Bundled fonts, icons and the Wave wallpaper keep their own licenses.

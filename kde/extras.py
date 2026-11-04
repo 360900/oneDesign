@@ -2,7 +2,7 @@
 import io
 import json
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from onetokens import ROOT, WALLS
 
@@ -26,16 +26,17 @@ def wallpapers():
     out = {}
     for wall in WALLS:
         pkg = f"One-{wall.capitalize()}"
+        author, lic = ("CachyOS", "GPL-1.0-only") if wall == "wave" else ("oneDesign", "CC-BY-SA-4.0")
         light, dark = WALL_SRC / f"{wall}-light.webp", WALL_SRC / f"{wall}-dark.webp"
         w, h = Image.open(light).size
         out[f"{pkg}/contents/images/{w}x{h}.jpg"] = _jpg(light)
         out[f"{pkg}/contents/images_dark/{w}x{h}.jpg"] = _jpg(dark)
-        thumb = Image.open(light).convert("RGB").resize((400, 250), Image.LANCZOS)
+        thumb = ImageOps.fit(Image.open(light).convert("RGB"), (400, 250), Image.LANCZOS)
         buf = io.BytesIO()
         thumb.save(buf, "JPEG", quality=88)
         out[f"{pkg}/contents/screenshot.jpg"] = buf.getvalue()
         out[f"{pkg}/metadata.json"] = json.dumps({
-            "KPlugin": {"Authors": [{"Name": "oneDesign"}], "Id": pkg, "License": "CC-BY-SA-4.0",
+            "KPlugin": {"Authors": [{"Name": author}], "Id": pkg, "License": lic,
                         "Name": f"One {wall.capitalize()}"}
         }, indent=4) + "\n"
     return out
@@ -45,7 +46,7 @@ def rail_wallpapers(wall):
     """Small wallpaper thumbnails for the rail's workspace tiles: {relative path: bytes}."""
     out = {}
     for mode in ("light", "dark"):
-        img = Image.open(WALL_SRC / f"{wall}-{mode}.webp").convert("RGB").resize((240, 150), Image.LANCZOS)
+        img = ImageOps.fit(Image.open(WALL_SRC / f"{wall}-{mode}.webp").convert("RGB"), (240, 150), Image.LANCZOS)
         buf = io.BytesIO()
         img.save(buf, "JPEG", quality=85)
         out[f"contents/images/wall-{mode}.jpg"] = buf.getvalue()

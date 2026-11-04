@@ -3,7 +3,7 @@ import io
 import re
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from onetokens import BLACK, ROOT, WHITE
 
@@ -80,7 +80,7 @@ def _icon(name, color):
 
 def _jpg(path, size=(1920, 1200)):
     im = Image.open(path).convert("RGB")
-    im = im.resize(size, Image.LANCZOS) if im.size[0] > size[0] else im
+    im = ImageOps.fit(im, size, Image.LANCZOS) if im.size[0] > size[0] else im
     buf = io.BytesIO()
     im.save(buf, "JPEG", quality=90, optimize=True, progressive=True)
     return buf.getvalue()
