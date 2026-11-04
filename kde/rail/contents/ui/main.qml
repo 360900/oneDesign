@@ -251,6 +251,29 @@ PlasmoidItem {
         kwin("/VirtualDesktopManager", "org.kde.KWin.VirtualDesktopManager", "createDesktop", "(us)",
              [new DBus.uint32(n), i18n("Desktop %1", n + 1)]);
     }
+    // KWin moves the workspace's windows to another one, nothing closes
+    function removeDesktop(id) {
+        kwin("/VirtualDesktopManager", "org.kde.KWin.VirtualDesktopManager", "removeDesktop", "(s)", [id]);
+    }
+    function openWorkspaceMenu(ws) {
+        workspaceMenuComponent.createObject(root, { visualParent: ws, deskId: ws.deskId }).openRelative();
+    }
+    Component {
+        id: workspaceMenuComponent
+        PlasmaExtras.Menu {
+            id: wm
+            property var deskId
+            placement: Plasmoid.location === PlasmaCore.Types.RightEdge ? PlasmaExtras.Menu.LeftPosedTopAlignedPopup
+                                                                        : PlasmaExtras.Menu.RightPosedTopAlignedPopup
+            onStatusChanged: if (status === PlasmaExtras.Menu.Closed) wm.destroy()
+            PlasmaExtras.MenuItem {
+                text: i18n("Remove Workspace")
+                icon: "list-remove"
+                enabled: vdi.numberOfDesktops > 1
+                onClicked: root.removeDesktop(wm.deskId)
+            }
+        }
+    }
     // Inset with rounded corners normally; flush and full height while a window is maximized
     property bool maximized: false
     function recountMaximized() {
@@ -560,6 +583,11 @@ PlasmoidItem {
                         }
                         HoverHandler { id: hover }
                         TapHandler { onTapped: root.switchTo(ws.index + 1) }
+                        MouseArea { // accepts the click, so Plasma's own panel menu stays closed
+                            anchors.fill: parent
+                            acceptedButtons: Qt.RightButton
+                            onClicked: root.openWorkspaceMenu(ws)
+                        }
                         // hovering with a file or anything else held switches without ending the drag
                         DropArea {
                             id: dragHover
