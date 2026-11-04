@@ -1,0 +1,37 @@
+Implement and fix these one by one:
+Status as of 2026-11-04, from commits through abed6fa.
+[open] not started. [done] committed. [partial] part of the item is still open. [review] the named examples are done, but the item is open-ended. [on hold] waiting on something external.
+
+1. [done] fix: why is an open app in the pinned list in rail settings and why can't I remove it? it's gone after closing the app.
+   3776861
+2. [done] implement: why is dark mode more transparent than white mode? white mode should be as transparent as dark mode because it looks better (one rail).
+   820a09e
+3. [done] fix: pinned app ordering resets after reboot (I ordered them by drag).
+   a58ea0d
+4. [done] implement: remove the button to add new apps (and its dialog). we'll pin apps from app launcher search.
+   89b9616, pinning from search in 484432c
+5. [done] implement: When an app has multiple windows and they are both not in focus, clicking them should bring the one that was in focus the last to the focus and if one of them is on the focus, clicking again should swap the windows (the default KDE panel behaviour).
+   c51b0c8
+6. [done] implement: We should have an indication for multiple windows (increasing dynamically based on how many windows are open).
+   c51b0c8, one edge mark per open window
+7. [review] general fix&implement: we should have 1:1 KDE parity in this. Research and implement all.
+   c51b0c8 (options, click logic, context menu, previews, audio marks), 7831ba8. Nothing in the log says the parity research is finished.
+8. [done] implement: Create an animation for the panel expansion when an app is maximized.
+   e454c48, length restored from panel settings in 27cb27c
+9. [done] implement: app launcher search should have the categories and stuff KDE's has. (for example, settings entries show their categories above them.) in short, you are going to make the search implementation complete. remove the "search apps only no files, settings or calculator" setting and implement what KDE has (plasma search)
+   484432c
+10. [review] implement: we should be consistent with and integrated in KDE COMPLETELY. (for example, changing "Plasma Search" settings should effect our search and they should be the same search in logic. Pinning apps in settings should actually pin apps in rail etc. these are just examples)
+   Plasma Search in 484432c, pins from settings in 19585cc, Solid for drives in 5b10525. 8271fb8 later split the rail and drawer pins into separate lists.
+11. [on hold] implement: users should be able to get the tray icons from the pop-up to a vertical line with drag-and-drop. they should be orderable AND movable to pop-up too. orderable in the pop-up and in rail.
+   Waiting on https://invent.kde.org/plasma/plasma-workspace/-/merge_requests/6958. As of 2026-11-03 it only adds reordering on the tray's Entries config page, not dragging between pop-up and panel.
+12. [done] fix: there should be no "notifications" tray icon since we have "One Notifications" widget in Rail.
+   3725810
+13. [review] implement: users should be able to edit the one Rail in edit mode. everything made there should take effect immediately, just like kde panel. one exception: users shouldn't be able to create our panel or move them to top or bottom. just left and right (since it breaks horribly). if you can't do that, just make top and bottom not break horribly. even "show panel configuration" is broken and something takes up all the screen
+   27cb27c (panel settings drive the rail, stands down in edit mode, left and right only). The log doesn't explicitly mention immediate effect or the full-screen "show panel configuration" bug.
+14. [partial] fix: some styles are broken or something. for example: /home/tarik/Pictures/Screenshots/Screenshot_20261103_151758.png and /home/tarik/Pictures/Screenshots/Screenshot_20261103_151855.png (unreadable text when selected) and /home/tarik/Pictures/Screenshots/Screenshot_20261103_151949.png (no padding before numbers in number boxes)
+   Selected text fixed in fe9d3f2. Number box padding is still open: no commit touches it.
+15. [done] implement: app launcher should have a list of all apps (scrollable and categorized), enabled by default. Every app launcher has this.
+   484432c
+16. [review] fix: why is lock screen is a script? fix all half-baked features and implementations like that including BUT NOT LIMITED TO my example.
+   Lock screen in 50a80cd, lsblk polling replaced in 5b10525, qdbus6 replaced in c51b0c8. Nothing in the log says the wider sweep is finished.
+17. [open] implement: while dragging and dropping stuff (like files, windows, etc), also hovering over workspaces on rail should switch to that workspace while preserving the thing we are holding.
