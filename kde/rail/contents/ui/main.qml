@@ -379,6 +379,35 @@ PlasmoidItem {
         readonly property real thumbW: Math.min(48, width - 14)
         readonly property real thumbH: Math.round(thumbW * aspect)
 
+        // ---- where the thumbnails are, in panel coordinates, for the KWin script that switches workspaces
+        // under a moved window (kde/workspacedrag): KWin holds the pointer then, so no hover reaches us
+        function publishZones() {
+            const rects = [];
+            for (let i = 0; wsCol.visible && i < wsRepeater.count; i++) {
+                const t = wsRepeater.itemAt(i);
+                if (!t) continue;
+                const p = t.mapToItem(null, 0, 0);
+                rects.push([Math.round(p.x), Math.round(p.y), Math.round(t.width), Math.round(t.height)]);
+            }
+            const zones = JSON.stringify({ width: rail.Window.width, rects: rects });
+            if (Plasmoid.configuration.workspaceZones !== zones) Plasmoid.configuration.workspaceZones = zones;
+        }
+        Timer {
+            id: zonesTimer
+            interval: 500
+            onTriggered: rail.publishZones()
+        }
+        onWidthChanged: zonesTimer.restart()
+        onXChanged: zonesTimer.restart()
+        onYChanged: zonesTimer.restart()
+        Window.onWidthChanged: zonesTimer.restart()
+        Window.onHeightChanged: zonesTimer.restart()
+        Connections {
+            target: root
+            function onEditModeChanged() { zonesTimer.restart() }
+        }
+        Component.onCompleted: zonesTimer.restart()
+
         MouseArea {
             // wheel anywhere on the workspace block cycles desktops
             anchors.left: parent.left
@@ -408,7 +437,11 @@ PlasmoidItem {
                 Layout.row: Plasmoid.configuration.workspacesFirst ? 0 : 3
                 visible: Plasmoid.configuration.showWorkspaces
                 spacing: root.gap + 2
+                onVisibleChanged: zonesTimer.restart()
+                onYChanged: zonesTimer.restart()
+                onHeightChanged: zonesTimer.restart()
                 Repeater {
+                    id: wsRepeater
                     model: vdi.numberOfDesktops
                     delegate: Item {
                         id: ws

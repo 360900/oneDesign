@@ -295,6 +295,7 @@ def cmd_apply(a):
     kwrite("kwinrc", "org.kde.kdecoration2", "BorderSizeAuto", "false")
     kwrite("kwinrc", "Plugins", "blurEnabled", "true")
     kwrite("kwinrc", "Plugins", "contrastEnabled", "true")
+    kwrite("kwinrc", "Plugins", "onedesign-workspacedragEnabled", "true")
     kwrite("kwinrc", "Effect-blur", "BlurStrength", str(m["kwin"]["blurStrength"]))
     kwrite("kwinrc", "Effect-blur", "NoiseStrength", str(m["kwin"]["noiseStrength"]))
     # Super alone opens the launcher (the One drawer provides it)
@@ -353,7 +354,7 @@ def cmd_uninstall(a):
     if not lst.exists():
         sys.exit("nothing installed")
     roots = {DATA / t for t in ("color-schemes", "aurorae/themes", "plasma/desktoptheme", "plasma/look-and-feel",
-                                "wallpapers", "konsole", "fonts", "icons", "plasma/plasmoids", "plasma/shells")} | {CONFIG / "Kvantum"}
+                                "wallpapers", "konsole", "fonts", "icons", "plasma/plasmoids", "plasma/shells", "kwin/scripts")} | {CONFIG / "Kvantum"}
     roots |= {d / t for d in freecad_dirs() for t in ("Mod", "Gui/Stylesheets")}
     dirs = set()
     for line in lst.read_text().split("\n"):

@@ -95,6 +95,10 @@ def build(out, accent="blue", wall="wave", shell="rail"):
     for ident in ("org.onedesign.rail", "org.onedesign.drawer"):
         for name in ("ConfigPinned.qml", "TaskMenu.qml"):
             write(out, f"share/plasma/plasmoids/{ident}/contents/ui/{name}", (HERE / "shared" / name).read_text())
+    drag = HERE / "workspacedrag"
+    for f in sorted(drag.rglob("*")):
+        if f.is_file():
+            write(out, f"share/kwin/scripts/onedesign-workspacedrag/{f.relative_to(drag)}", f.read_text())
     for rel, data in extras.rail_wallpapers(wall).items():
         write(out, f"share/plasma/plasmoids/org.onedesign.rail/{rel}", data)
     # The lock screen comes from a Plasma shell package; ours holds only the lock screen and falls back to

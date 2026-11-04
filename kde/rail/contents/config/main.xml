@@ -7,6 +7,8 @@
     <entry name="launchers" type="StringList"><default></default></entry>
     <entry name="fillWhenMaximized" type="Bool"><default>true</default></entry>
     <entry name="maxDesktops" type="Int"><default>6</default><min>1</min><max>12</max></entry>
+    <!-- written by the rail, read by the workspacedrag KWin script -->
+    <entry name="workspaceZones" type="String"><default></default></entry>
 
     <!-- layout -->
     <entry name="showWorkspaces" type="Bool"><default>true</default></entry>

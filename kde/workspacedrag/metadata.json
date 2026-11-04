@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "KWin/Script",
+    "KPlugin": {
+        "Authors": [{ "Name": "oneDesign" }],
+        "Description": "Hovering a moved window over a rail workspace switches to it",
+        "Icon": "view-pages-overview",
+        "Id": "onedesign-workspacedrag",
+        "License": "GPL-2.0-or-later",
+        "Name": "One Workspace Drag",
+        "Version": "1.0"
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js"
+}
