@@ -1,12 +1,12 @@
 /* oneDesign prototype engine: tokens/one.json -> CSS custom properties. */
 (function () {
-  const WALLS = { dune: 55, lagoon: 220, orchid: 320, moss: 150 };
+  const WALLS = { dune: 55, lagoon: 220, orchid: 320, moss: 150, wave: 200 };
 
   const params = new URLSearchParams(location.search);
   const state = {
     mode: params.get("mode") || "light",
     accent: params.get("accent") || "wallpaper",
-    wall: params.get("wall") || "lagoon",
+    wall: params.get("wall") || "wave",
     scene: params.get("scene") || document.body.dataset.scene || "desktop",
   };
 

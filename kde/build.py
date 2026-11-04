@@ -48,7 +48,7 @@ def previews(mode):
     return {"preview.png": small.getvalue(), "fullscreenpreview.jpg": src.read_bytes()}
 
 
-def build(out, accent="blue", wall="lagoon", shell="bar"):
+def build(out, accent="blue", wall="wave", shell="rail"):
     if out.exists():
         shutil.rmtree(out)
     wallpaper = f"One-{wall.capitalize()}"
@@ -122,8 +122,8 @@ def build(out, accent="blue", wall="lagoon", shell="bar"):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--accent", default="blue", help="accent name from tokens, or 'wallpaper'")
-    ap.add_argument("--shell", default="bar", choices=("bar", "rail"), help="panel layout: top bar + dock, or left rail")
-    ap.add_argument("--wall", default="lagoon", choices=list(WALLS))
+    ap.add_argument("--shell", default="rail", choices=("rail", "bar"), help="panel layout: left rail, or top bar + dock")
+    ap.add_argument("--wall", default="wave", choices=list(WALLS))
     ap.add_argument("--out", default=str(ROOT / "build" / "kde"))
     a = ap.parse_args()
     out = build(Path(a.out), a.accent, a.wall, a.shell)

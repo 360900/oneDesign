@@ -86,7 +86,7 @@ def _jpg(path, size=(1920, 1200)):
     return buf.getvalue()
 
 
-def build(themes, wall="lagoon"):
+def build(themes, wall="wave"):
     """themes: (light, dark) resolved themes. Returns {relpath: str|bytes}."""
     out = {
         "Main.qml": (HERE / "sddm" / "Main.qml").read_text(),

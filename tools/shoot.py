@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render prototype scenes to PNG with headless Chromium.
 
-usage: shoot.py [--scene a,b] [--mode light,dark] [--wall lagoon] [--accent wallpaper] [--out renders]
+usage: shoot.py [--scene a,b] [--mode light,dark] [--wall wave] [--accent wallpaper] [--out renders]
 """
 import argparse, functools, http.server, subprocess, threading, sys
 from concurrent.futures import ThreadPoolExecutor
@@ -38,7 +38,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--scene", default="desktop,settings,login,components,apps,rail,rail-open,edge")
     p.add_argument("--mode", default="light,dark")
-    p.add_argument("--wall", default="lagoon")
+    p.add_argument("--wall", default="wave")
     p.add_argument("--accent", default="wallpaper")
     p.add_argument("--scale", default="1")
     p.add_argument("--out", default="renders")

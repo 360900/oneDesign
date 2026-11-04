@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-WALLS = {"dune": 55, "lagoon": 220, "orchid": 320, "moss": 150}
+WALLS = {"dune": 55, "lagoon": 220, "orchid": 320, "moss": 150, "wave": 200}
 
 
 def load_tokens():
@@ -111,7 +111,7 @@ WHITE = Color(1, 1, 1)
 BLACK = Color(0, 0, 0)
 
 
-def resolve(mode="light", accent="blue", wall="lagoon", tokens=None):
+def resolve(mode="light", accent="blue", wall="wave", tokens=None):
     """Return a Theme object with colors (Color) and metrics for one mode/accent."""
     t = tokens or load_tokens()
     if accent == "wallpaper":

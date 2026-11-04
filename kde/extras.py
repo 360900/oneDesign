@@ -144,15 +144,14 @@ window.csd, window.csd > .titlebar, dialog.csd {{ border-radius: {sh['window']}p
 """
 
 
-def plasmalogin_conf(wall="lagoon"):
+def plasmalogin_conf(wall="wave"):
     pkg = f"One-{wall.capitalize()}"
-    w, h = Image.open(WALL_SRC / f"{wall}-light.webp").size
     return f"""# oneDesign greeter wallpaper. Install as /etc/plasmalogin.conf.d/one.conf
 [Greeter]
 WallpaperPluginId=org.kde.image
 
 [Greeter][Wallpaper][org.kde.image][General]
-Image=file:///usr/share/wallpapers/{pkg}/contents/images/{w}x{h}.jpg
+Image=file:///usr/share/wallpapers/{pkg}
 """
 
 

@@ -199,7 +199,7 @@
               <div class="group"><div class="prow"><div class="swatches">${sw}</div></div>
                 <div class="prow"><div class="grow"><div class="ptitle">Tint surfaces with accent</div><div class="psub">Subtly colors windows and panels</div></div><div class="switch on"><div class="knob"></div></div></div></div>
               <div class="group-title">Wallpaper</div>
-              <div class="group"><div class="prow wall-row">${["dune", "lagoon", "orchid", "moss"].map((w) => `<div class="wall-thumb ${window.ONE.state.wall === w ? "on" : ""}" style="background-image:url(assets/wallpapers/${w}-${mode === "dark" ? "dark" : "light"}.webp)"></div>`).join("")}<div class="wall-thumb add">${I("add")}</div></div></div>
+              <div class="group"><div class="prow wall-row">${["dune", "lagoon", "orchid", "moss", "wave"].map((w) => `<div class="wall-thumb ${window.ONE.state.wall === w ? "on" : ""}" style="background-image:url(assets/wallpapers/${w}-${mode === "dark" ? "dark" : "light"}.webp)"></div>`).join("")}<div class="wall-thumb add">${I("add")}</div></div></div>
               <div class="group-title">Interface</div>
               <div class="group">
                 <div class="prow"><div class="lead accent">${I("file")}</div><div class="grow"><div class="ptitle">Interface font</div><div class="psub">Used across apps and shell</div></div><div class="trail"><span>${tok().font.ui} 11</span>${I("chevron-right")}</div></div>

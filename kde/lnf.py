@@ -249,7 +249,7 @@ Theme={ident(dark)}
 """
 
 
-def build(th, wallpaper="One-Lagoon", shell="bar"):
+def build(th, wallpaper="One-Wave", shell="rail"):
     """Returns {relative path: text} for share/plasma/look-and-feel/<ident>/."""
     c = th.c
     launchers = ", ".join(f'"{x}"' for x in LAUNCHERS)
