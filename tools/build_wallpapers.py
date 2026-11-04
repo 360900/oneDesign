@@ -2,6 +2,8 @@
 """Render the One wallpapers (light/dark) as procedural 3D scenes in Blender Cycles.
 
 usage: build_wallpapers.py [--only dune,lagoon] [--mode light,dark] [--scale 1] [--samples 512] [--out DIR]
+       build_wallpapers.py --blend DIR [--only wave] [--mode light,dark]   save scenes to tweak, 7680x4800
+       build_wallpapers.py --convert PNG NAME-MODE   turn a finished render into its webp as is
 
 Run with plain python3; it re-runs itself inside `blender -b` per wallpaper.
 Needs Blender 4.2+; uses OptiX/CUDA when available, CPU otherwise (slow).
@@ -24,6 +26,7 @@ SETS = {
     "lagoon": (220, 185, 265),
     "orchid": (320, 285, 15),
     "moss": (150, 115, 195),
+    "wave": (200, 170, 255),
 }
 
 
@@ -49,9 +52,12 @@ def oklch(L, C, h):
 
 # ---------------------------------------------------------------- outside Blender
 
-def to_webp(png, dst):
+def to_webp(png, dst, grain=True):
     import numpy as np
     from PIL import Image
+    if not grain:
+        Image.open(png).convert("RGB").save(dst, quality=95, method=6, use_sharp_yuv=True)
+        return
     im = np.asarray(Image.open(png).convert("RGB")).astype(np.float32)
     # Fine grain; lossy webp smooths away plain dither and gradients band again.
     im += np.random.default_rng(0).normal(0, 1.5, im.shape[:2] + (1,)).astype(np.float32)
@@ -67,22 +73,32 @@ def main():
     p.add_argument("--samples", type=int, default=512)
     p.add_argument("--out", type=Path, default=OUT)
     p.add_argument("--blender", default=os.environ.get("BLENDER", "blender"))
+    p.add_argument("--blend", type=Path, help="save .blend files here instead of rendering")
+    p.add_argument("--convert", nargs=2, metavar=("PNG", "NAME-MODE"), help="make a webp from a finished render")
     a = p.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
+    if a.convert:
+        to_webp(a.convert[0], a.out / f"{a.convert[1]}.webp", grain=False)
+        return
+    if a.blend:
+        a.blend.mkdir(parents=True, exist_ok=True)
     for name in SETS:
         if name not in a.only.split(","):
             continue
         for mode in a.mode.split(","):
-            png = a.out / f".{name}-{mode}.png"
+            png = a.blend / f"{name}-{mode}.blend" if a.blend else a.out / f".{name}-{mode}.png"
             cmd = [a.blender, "-b", "--factory-startup", "--python", __file__, "--",
                    name, mode, str(png), str(a.scale), str(a.samples)]
             r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             if r.returncode or not png.exists():
                 sys.exit(r.stdout[-4000:])
+            if a.blend:
+                print(png, flush=True)
+                continue
             to_webp(png, a.out / f"{name}-{mode}.webp")
             png.unlink()
             print(name, mode, "ok", flush=True)
-    if a.out == OUT:
+    if a.out == OUT and not a.blend:
         manifest = [{"id": k, "hue": v[0]} for k, v in SETS.items()]
         (OUT / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
@@ -350,6 +366,14 @@ def blender_main(name, mode, out, scale, samples):
                ribbon=ribbon, area=area, camera=camera, backdrop_image=backdrop_image, world=world,
                mesh_obj=mesh_obj, node_mat=node_mat, resample=resample, scn=scn, bpy=bpy)
     SCENES[name](**ctx)
+    if out.endswith(".blend"):
+        scn.render.resolution_x, scn.render.resolution_y = 7680, 4800
+        scn.render.filepath = f"//{name}-{mode}.png"
+        for im in bpy.data.images:
+            if im.name == "backdrop":
+                im.pack()
+        bpy.ops.wm.save_as_mainfile(filepath=out)
+        return
     bpy.ops.render.render(write_still=True)
 
 
@@ -508,7 +532,71 @@ def scene_moss(np, rng, dark, hues, col, principled, glass, ribbon, area, camera
         area("rim", (5, 7, 5), (0, 2, 0), 4, 1500, col(0.9, 0.08, h1))
 
 
-SCENES = {"dune": scene_dune, "lagoon": scene_lagoon, "orchid": scene_orchid, "moss": scene_moss}
+def scene_wave(np, rng, dark, hues, col, node_mat, mesh_obj, area, camera, backdrop_image, world, **_):
+    h1, h2, h3 = hues
+    if dark:
+        bg = dict(a=(0.17, 0.025, h3), b=(0.11, 0.02, h1), angle=35,
+                  blobs=[(0.42, 0.62, 0.34, (0.25, 0.035, h1), 0.8)])
+    else:
+        bg = dict(a=(0.93, 0.025, h2), b=(0.84, 0.04, h1), angle=35,
+                  blobs=[(0.42, 0.62, 0.34, (0.97, 0.012, h2), 0.9), (0.95, 0.1, 0.3, (0.80, 0.05, h3), 0.5)])
+    world(backdrop_image(bg), col(0.98, 0.02, h2), col(0.3, 0.05, h1), 0.9 if not dark else 0.22)
+    camera((0, -14, 0.4), (0, 0, 0), lens=50, dof=13.5, fstop=5.6)
+
+    def satin(mname, shift):
+        """Base color runs along the sheet, teal on the left to violet blue on the right."""
+        m, nt, o = node_mat(mname)
+        b = nt.nodes.new("ShaderNodeBsdfPrincipled")
+        for k, v in {"Roughness": 0.34, "Coat Weight": 0.45, "Coat Roughness": 0.16, "Sheen Weight": 0.5}.items():
+            b.inputs[k].default_value = v
+        geo = nt.nodes.new("ShaderNodeNewGeometry")
+        sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+        rng_x = nt.nodes.new("ShaderNodeMapRange")
+        rng_x.inputs[1].default_value = -7.5 + shift
+        rng_x.inputs[2].default_value = 7.5 + shift
+        ramp = nt.nodes.new("ShaderNodeValToRGB")
+        dim = 0.14 if dark else 0.0
+        ramp.color_ramp.elements[0].position = 0.08
+        ramp.color_ramp.elements[0].color = col(0.72 - dim, 0.12, h2)
+        ramp.color_ramp.elements[1].position = 0.92
+        ramp.color_ramp.elements[1].color = col(0.50 - dim, 0.17, h3)
+        mid = ramp.color_ramp.elements.new(0.52)
+        mid.color = col(0.62 - dim, 0.14, h1)
+        L = nt.links.new
+        L(geo.outputs["Position"], sep.inputs[0])
+        L(sep.outputs[0], rng_x.inputs[0])
+        L(rng_x.outputs[0], ramp.inputs[0])
+        L(ramp.outputs[0], b.inputs["Base Color"])
+        L(b.outputs[0], o.inputs[0])
+        return m
+
+    # Layered sheets: each spans a top and bottom edge that swell apart and pinch together, a smooth grid
+    # rather than a swept ribbon, so wide folds can't kink. A crest on the left falls to the lower right.
+    nu, nv = 700, 90
+    x = np.linspace(-9.5, 9.5, nu)[:, None]
+    v = np.linspace(-1, 1, nv)[None, :]
+    for i in range(6):
+        center = 0.55 - 0.25 * x + 0.95 * np.sin(0.52 * x + 1.75 + 0.2 * i) - 0.34 * (i - 2.5)
+        half = 0.38 + 0.72 * (0.5 + 0.5 * np.sin(0.62 * x + 0.5 + 0.55 * i))
+        y = (0.42 * i - 1.0 + 0.3 * np.sin(0.45 * x + i * 0.8)
+             + v * (0.55 * np.sin(0.8 * x + 0.5 * i) + 0.25) + 0.22 * v * v)
+        z = center + half * (v + 0.12 * np.sin(1.5 * v + x))
+        V = np.stack([np.broadcast_to(x, y.shape), y, z], -1).reshape(-1, 3)
+        faces = [(a * nv + b, a * nv + b + 1, (a + 1) * nv + b + 1, (a + 1) * nv + b)
+                 for a in range(nu - 1) for b in range(nv - 1)]
+        ob = mesh_obj(f"sheet{i}", V, faces, satin(f"w{i}", 0.5 * i))
+        ob.modifiers.new("thickness", "SOLIDIFY").thickness = 0.025
+    if dark:
+        area("key", (-5, -7, 7), (0, 0, 0), 7, 620, col(0.92, 0.04, h2))
+        area("rim", (6, 6, 5), (0, 0, 0), 4, 2600, col(0.75, 0.14, h1))
+        area("rim2", (-7, 5, -4), (0, 0, 0), 4, 1500, col(0.7, 0.14, h2))
+    else:
+        area("key", (-5, -7, 7), (0, 0, 0), 7, 1500, col(0.99, 0.015, h2))
+        area("rim", (6, 6, 5), (0, 0, 0), 4, 1800, col(0.92, 0.06, h1))
+        area("fill", (6, -8, -4), (0, 0, 0), 7, 420, col(0.92, 0.04, h3))
+
+
+SCENES = {"dune": scene_dune, "lagoon": scene_lagoon, "orchid": scene_orchid, "moss": scene_moss, "wave": scene_wave}
 
 if __name__ == "__main__":
     if "--" in sys.argv:
