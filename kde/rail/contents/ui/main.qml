@@ -309,6 +309,21 @@ PlasmoidItem {
     // the length you set before it grows and puts exactly that back, and stands down in edit mode and
     // while the panel floats (Plasma then handles maximized windows itself).
     readonly property bool editMode: Plasmoid.containment && Plasmoid.containment.corona ? Plasmoid.containment.corona.editMode === true : false
+
+    // The panel opens a gap between its widgets for anything dragged over it, to place it as a new widget,
+    // which pushes the thumbnails away from the pointer. Outside edit mode nothing gets placed on the panel.
+    // There is no API for this: KDE's task manager finds the flag by walking up its parents the same way.
+    function inhibitPanelDrops() {
+        for (let p = root.parent; p; p = p.parent) {
+            if (p.appletRequestsInhibitDnD !== undefined) {
+                p.appletRequestsInhibitDnD = !editMode;
+                return;
+            }
+        }
+    }
+    onParentChanged: Qt.callLater(inhibitPanelDrops)
+    onEditModeChanged: inhibitPanelDrops()
+
     property var rest: null          // the panel's length settings while the rail is grown
     property real panelLength: 0
     property int sentLength: 0
