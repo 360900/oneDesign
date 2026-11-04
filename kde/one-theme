@@ -3,8 +3,8 @@
 
   one-theme build    [--accent NAME] [--wall NAME]
   one-theme install  copy build/kde into ~/.local/share and ~/.config
-  one-theme apply    [--mode light|dark|auto (default: keep current)] [--layout] [--live]
-  one-theme restore  [BACKUP]   put back the configs saved by the last apply
+  one-theme apply    [--mode light|dark|auto (default: keep current)] [--layout] [--live] [--keep-wallpaper]
+  one-theme restore  [BACKUP] [--original] [--live]   put back the configs saved by the last apply
   one-theme uninstall
   one-theme dm       print the root commands for the login screen
 """
@@ -35,6 +35,7 @@ SHELL, KDE_SHELL = "org.onedesign.desktop", "org.kde.plasma.desktop"
 # older installs kept a full copy of KDE's shell package, refreshed by a login script
 LEGACY = (DATA / "plasma/shells" / KDE_SHELL, CONFIG / "plasma-workspace/env/onedesign-lockscreen.sh", DATA / "onedesign")
 GTK_BEGIN, GTK_END = "/* oneDesign:begin */", "/* oneDesign:end */"
+QDBUS = shutil.which("qdbus6") or shutil.which("qdbus-qt6")  # the Qt 6 name differs per distro
 
 
 def manifest():
@@ -177,9 +178,9 @@ def apply_gtk():
 def detect_tray_ids():
     """Ids of the status notifier (tray) items running right now, so the rail can keep them behind
     the tray chevron. Empty when there is no session bus or no watcher."""
-    if not shutil.which("qdbus6"):
+    if not QDBUS:
         return []
-    r = subprocess.run(["qdbus6", "org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher",
+    r = subprocess.run([QDBUS, "org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher",
                         "org.kde.StatusNotifierWatcher.RegisteredStatusNotifierItems"],
                        capture_output=True, text=True)
     ids = []
@@ -187,7 +188,7 @@ def detect_tray_ids():
         service, _, path = entry.partition("/")
         if not service:
             continue
-        q = subprocess.run(["qdbus6", service, "/" + path if path else "/StatusNotifierItem", "org.kde.StatusNotifierItem.Id"],
+        q = subprocess.run([QDBUS, service, "/" + path if path else "/StatusNotifierItem", "org.kde.StatusNotifierItem.Id"],
                            capture_output=True, text=True)
         ident = q.stdout.strip()
         if q.returncode == 0 and ident and ident not in ids:
@@ -211,31 +212,44 @@ def reset_layout_live(lf):
     """Rebuild the panels in the running shell from the installed layout script.
     plasma-apply-lookandfeel does nothing when the same theme is already active, so do it directly."""
     js = DATA / "plasma/look-and-feel" / lf / f"contents/layouts/{current_shell()}-layout.js"
-    if not js.exists() or not shutil.which("qdbus6"):
+    if not js.exists() or not QDBUS:
         return
     script = ("var old = panels(); for (var i = 0; i < old.length; i++) { old[i].remove(); }\n" + js.read_text())
-    print("+ qdbus6 org.kde.plasmashell /PlasmaShell evaluateScript <layout>")
-    subprocess.run(["qdbus6", "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript", script],
+    print(f"+ {QDBUS} org.kde.plasmashell /PlasmaShell evaluateScript <layout>")
+    subprocess.run([QDBUS, "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript", script],
                    check=False, stdout=subprocess.DEVNULL)
 
 
 def restart_shell():
     """Plasmoid QML is only read when the shell starts."""
-    import time
     time.sleep(3)  # let the shell write the new layout out first
     use_shell(SHELL)
+    start_shell(stop_shell())
+
+
+def stop_shell():
+    """Returns whether the shell runs as a systemd service, for start_shell."""
     if shutil.which("systemctl") and subprocess.run(["systemctl", "--user", "is-active", "--quiet", "plasma-plasmashell.service"]).returncode == 0:
-        run("systemctl", "--user", "restart", "plasma-plasmashell.service", check=False)
-    elif shutil.which("kquitapp6") and shutil.which("kstart"):
+        run("systemctl", "--user", "stop", "plasma-plasmashell.service", check=False)
+        return True
+    if shutil.which("kquitapp6"):
         run("kquitapp6", "plasmashell", check=False)
         time.sleep(1)
+    return False
+
+
+def start_shell(service):
+    if service:
+        run("systemctl", "--user", "start", "plasma-plasmashell.service", check=False)
+    elif shutil.which("kstart"):
         subprocess.Popen(["kstart", "plasmashell"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     else:
-        print("restart plasmashell yourself: kquitapp6 plasmashell; kstart plasmashell")
+        print("start plasmashell yourself")
 
 
 def cmd_apply(a):
     m = manifest()
+    auto = a.mode == "auto" or (a.mode is None and kread("kdeglobals", "KDE", "AutomaticLookAndFeel") == "true")
     if a.mode is None:
         current = kread("kdeglobals", "KDE", "LookAndFeelPackage")
         a.mode = "dark" if current == m["lookandfeel"]["dark"] else "light"
@@ -270,7 +284,7 @@ def cmd_apply(a):
         if a.layout:
             (CONFIG / f"plasma-{current_shell()}-appletsrc").unlink(missing_ok=True)
         use_shell(SHELL)
-    kwrite("kdeglobals", "KDE", "AutomaticLookAndFeel", "true" if a.mode == "auto" else "false")
+    kwrite("kdeglobals", "KDE", "AutomaticLookAndFeel", "true" if auto else "false")
     kwrite("kdeglobals", "KDE", "DefaultLightLookAndFeel", m["lookandfeel"]["light"])
     kwrite("kdeglobals", "KDE", "DefaultDarkLookAndFeel", m["lookandfeel"]["dark"])
     kwrite("Kvantum/kvantum.kvconfig", "General", "theme", "One")
@@ -292,10 +306,10 @@ def cmd_apply(a):
     apply_gtk()
     if a.live:
         wall = DATA / "wallpapers" / m["wallpaper"]
-        if shutil.which("plasma-apply-wallpaperimage") and wall.exists():
+        if not a.keep_wallpaper and shutil.which("plasma-apply-wallpaperimage") and wall.exists():
             run("plasma-apply-wallpaperimage", str(wall), check=False)
-        if shutil.which("qdbus6"):
-            run("qdbus6", "org.kde.KWin", "/KWin", "reconfigure", check=False)
+        if QDBUS:
+            run(QDBUS, "org.kde.KWin", "/KWin", "reconfigure", check=False)
         restart_shell()
     print(f"applied {lf}. Log out and back in for fonts and Qt style to reach every app.")
 
@@ -305,8 +319,18 @@ def cmd_restore(a):
     snaps = sorted(root.iterdir()) if root.exists() else []
     if not snaps:
         sys.exit("no backups")
-    snap = root / a.backup if a.backup else snaps[-1]
+    if a.original:
+        # the newest backup taken while oneDesign wasn't applied
+        before = [s for s in snaps if "LookAndFeelPackage=org.onedesign" not in
+                  ((s / "kdeglobals").read_text() if (s / "kdeglobals").exists() else "")]
+        if not before:
+            sys.exit("no backup from before oneDesign")
+        snap = before[-1]
+    else:
+        snap = root / a.backup if a.backup else snaps[-1]
     saved = set((snap / "files.txt").read_text().split())
+    # A running shell writes its layout back when it exits, so it has to be down before the copy
+    service = stop_shell() if a.live else False
     for rel in TOUCHED:
         dst = CONFIG / rel
         if rel in saved:
@@ -317,6 +341,10 @@ def cmd_restore(a):
             dst.write_text(text) if text else dst.unlink()
         elif dst.exists():
             dst.unlink()
+    if a.live:
+        if QDBUS:
+            run(QDBUS, "org.kde.KWin", "/KWin", "reconfigure", check=False)
+        start_shell(service)
     print(f"restored {snap}")
 
 
@@ -406,8 +434,11 @@ def main():
                    help="default: keep the current light/dark choice (light on first apply)")
     p.add_argument("--layout", action="store_true", help="replace panels with the layout chosen at build")
     p.add_argument("--live", action="store_true", help="use plasma-apply-* tools on the running session")
+    p.add_argument("--keep-wallpaper", action="store_true", help="with --live, leave the current wallpaper alone")
     r = sub.add_parser("restore")
     r.add_argument("backup", nargs="?")
+    r.add_argument("--original", action="store_true", help="the newest backup from before oneDesign was applied")
+    r.add_argument("--live", action="store_true", help="restart the shell around the restore")
     sub.add_parser("uninstall")
     d = sub.add_parser("dm", help="print the sudo commands to theme the login screen")
     d.add_argument("--mode", choices=("light", "dark"), default="light")
