@@ -8,11 +8,21 @@ lock and login screens.
 ## Install on KDE Plasma
 
 ```sh
-git clone --depth 1 https://github.com/360900/oneDesign.git ~/.local/share/oneDesign && cd ~/.local/share/oneDesign && kde/one-theme build && kde/one-theme install && kde/one-theme apply --layout --live
+curl -fsSL https://raw.githubusercontent.com/360900/oneDesign/main/install.sh | sh
 ```
 
-Needs Plasma 6, `kvantum`, `aurorae`, `papirus-icon-theme`, Python 3 with Pillow and numpy.
-`kde/one-theme restore` undoes the apply. Options and login screen: `docs/kde.md`.
+Run it again to update. Installs the rail, Kvantum and the rest, with dependencies on Arch, Debian,
+Ubuntu, Fedora, openSUSE and their derivatives; elsewhere it lists what's missing. Needs Plasma 6.
+A first install replaces your panels.
+
+To undo, add a flag: `--rollback` returns to the previous version, `--uninstall` restores your
+desktop from before oneDesign.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/360900/oneDesign/main/install.sh | sh -s -- --rollback
+```
+
+Options and login screen: `docs/kde.md`.
 
 ## View
 
@@ -38,7 +48,7 @@ Static renders of every scene and mode are in `renders/`.
 | `prototypes/assets/one.css`, `scenes.css` | Component and scene styles |
 | `prototypes/assets/scenes.js` | Desktop, settings, apps, components, login scenes |
 | `tools/build_icons.py` | Packs Adwaita icons (Fluent, Material fallbacks) into `icons.js` |
-| `tools/build_wallpapers.py` | Renders the four wallpapers (light/dark) with Blender |
+| `tools/build_wallpapers.py` | Renders the wallpapers (light/dark) with Blender, or saves them as `.blend` files |
 | `tools/shoot.py` | Headless Chromium renders into `renders/` |
 | `docs/kde.md` | One for KDE Plasma: build, install, apply, limits |
 | `kde/` | KDE generators (`build.py`) and the `one-theme` CLI |
