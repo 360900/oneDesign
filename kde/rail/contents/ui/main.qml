@@ -423,7 +423,7 @@ PlasmoidItem {
                         Item {
                             id: face
                             anchors.fill: parent
-                            opacity: ws.current || hover.hovered ? 1 : 0.72
+                            opacity: ws.current || hover.hovered || dragHover.containsDrag ? 1 : 0.72
                             Behavior on opacity { NumberAnimation { duration: 120 } }
                             layer.enabled: true
                             layer.effect: MultiEffect {
@@ -527,6 +527,17 @@ PlasmoidItem {
                         }
                         HoverHandler { id: hover }
                         TapHandler { onTapped: root.switchTo(ws.index + 1) }
+                        // hovering with a file or anything else held switches without ending the drag
+                        DropArea {
+                            id: dragHover
+                            anchors.fill: parent
+                            enabled: !root.editMode
+                        }
+                        Timer {
+                            interval: 350
+                            running: dragHover.containsDrag && !ws.current
+                            onTriggered: root.switchTo(ws.index + 1)
+                        }
                     }
                 }
                 Item { // add a workspace
