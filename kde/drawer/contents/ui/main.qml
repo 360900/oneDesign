@@ -141,7 +141,7 @@ PlasmoidItem {
         model: appEntry
         delegate: QtObject {
             required property var model
-            Component.onCompleted: root.entryReady(model.actionList || [])
+            Component.onCompleted: root.entryReady(model.actionList || [], model.url)
         }
     }
     property var pendingMenu: null
@@ -151,20 +151,38 @@ PlasmoidItem {
         if (!desktopId) { entryReady([]); return; }
         appEntry.favorites = [desktopId];
     }
-    function entryReady(actions) {
+    function entryReady(actions, url) {
         const fn = pendingMenu;
         pendingMenu = null;
-        if (fn) fn(actions);
+        if (fn) fn(actions, url);
     }
     function triggerAppAction(a) {
-        appEntry.trigger(0, a.actionId, a.actionArgument);
+        if (a.run) a.run();
+        else appEntry.trigger(0, a.actionId, a.actionArgument);
         root.open = false;
+    }
+
+    // ---- desktop shortcuts, through the desktop itself: a link, as Link Here and Kickoff make
+    Kicker.ContainmentInterface { id: containmentInterface }
+    function canAddToDesktop() { return containmentInterface.screenContainmentMutable(root); }
+    // file.desktop from applications:file.desktop or a path
+    function desktopIdOf(launcher) {
+        const u = launcher.toString();
+        return u.substring(Math.max(u.lastIndexOf("/"), u.lastIndexOf(":")) + 1);
+    }
+    function addToDesktop(desktopId) {
+        withAppActions(desktopId, (actions, url) => {
+            const u = url ? url.toString() : "";
+            if (u.startsWith("file://"))
+                containmentInterface.addLauncher(root, Kicker.ContainmentInterface.Desktop, decodeURIComponent(u.substring(7)));
+        });
     }
 
     // right-click on a running or pinned row
     function openTaskMenu(row) {
-        const app = row.model.AppId || "";
-        withAppActions(app ? (app.endsWith(".desktop") ? app : app + ".desktop") : "", actions => {
+        const id = row.desktopId;
+        withAppActions(id, actions => {
+            if (id && canAddToDesktop()) actions = actions.concat({ text: i18n("Add to Desktop"), icon: "list-add", run: () => addToDesktop(id) });
             const m = taskMenuComponent.createObject(root, { r: root, modelIndex: appModel.makeModelIndex(row.index), appActions: actions, visualParent: row });
             m.show();
         });
@@ -179,9 +197,12 @@ PlasmoidItem {
                          icon: isPinned(launcher) ? "window-unpin" : "window-pin", run: () => togglePin(launcher) });
             if (railApplet()) items.push({ text: isOnRail(launcher) ? i18n("Unpin from Rail") : i18n("Pin to Rail"),
                                            icon: isOnRail(launcher) ? "window-unpin" : "window-pin", run: () => toggleRailPin(launcher) });
+            if (canAddToDesktop()) items.push({ text: i18n("Add to Desktop"), icon: "list-add",
+                                                run: () => { addToDesktop(desktopIdOf(launcher)); root.open = false; } });
         }
         (runnerActions || []).forEach((a, i) => items.push({ text: a.text, icon: a.iconSource || "", run: () => runRunnerAction(i) }));
         for (const a of (kickerActions || [])) {
+            if (a.actionId === "addToDesktop") continue; // ours above, on every row
             if (a.type === "separator") { items.push({ separator: true }); continue; }
             if (a.type === "title") { items.push({ separator: true }); items.push({ text: a.text, section: true }); continue; }
             items.push({ text: a.text, icon: a.icon || "", run: () => triggerKicker(a) });
@@ -455,8 +476,7 @@ PlasmoidItem {
                             const actions = res.model.actions || [];
                             const run = i => results.runAction(res.index, i);
                             if (res.launcher) {
-                                const file = res.urls[0].toString();
-                                root.withAppActions(file.substring(file.lastIndexOf("/") + 1),
+                                root.withAppActions(root.desktopIdOf(res.launcher),
                                     k => root.openAppMenu(res, res.launcher, k, root.triggerAppAction, actions, run));
                             } else root.openAppMenu(res, "", [], null, actions, run);
                         }
@@ -673,6 +693,10 @@ PlasmoidItem {
         readonly property bool active: model.IsActive === true
         readonly property bool pinned: model.IsLauncher === true || model.HasLauncher === true
         readonly property bool shown: run ? (running && Plasmoid.configuration.showRunning) : (!running && Plasmoid.configuration.showPinned)
+        readonly property string desktopId: {
+            const app = model.AppId || "";
+            return !app || app.endsWith(".desktop") ? app : app + ".desktop";
+        }
         function activate() { root.openApp(index, running, active, model.IsGroupParent === true); }
         // TaskMenu asks about audio; the drawer does not track streams
         readonly property bool hasAudioStream: false
