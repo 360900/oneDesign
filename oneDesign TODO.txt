@@ -34,4 +34,5 @@ Status as of 2026-11-04, from commits through abed6fa.
    484432c
 16. [review] fix: why is lock screen is a script? fix all half-baked features and implementations like that including BUT NOT LIMITED TO my example.
    Lock screen in 50a80cd, lsblk polling replaced in 5b10525, qdbus6 replaced in c51b0c8. Nothing in the log says the wider sweep is finished.
-17. [open] implement: while dragging and dropping stuff (like files, windows, etc), also hovering over workspaces on rail should switch to that workspace while preserving the thing we are holding.
+17. [done] implement: while dragging and dropping stuff (like files, windows, etc), also hovering over workspaces on rail should switch to that workspace while preserving the thing we are holding.
+   bdad8a0, moved windows in 17d42a0, panel gap fixed in 106acf0
