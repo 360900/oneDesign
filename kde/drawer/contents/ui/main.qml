@@ -157,8 +157,8 @@ PlasmoidItem {
         if (fn) fn(actions, url);
     }
     function triggerAppAction(a) {
-        if (a.run) a.run();
-        else appEntry.trigger(0, a.actionId, a.actionArgument);
+        if (a.run) { a.run(); return; }
+        appEntry.trigger(0, a.actionId, a.actionArgument);
         root.open = false;
     }
 
@@ -185,16 +185,19 @@ PlasmoidItem {
         Drag.supportedActions: Qt.LinkAction | Qt.CopyAction
         Drag.proposedAction: Qt.LinkAction
         Drag.onActiveChanged: root.dragging = Drag.active
-        // Not by dropAction: the desktop never accepts a drop it hands to KIO, so a made link reads as ignored.
-        // Focus may have left during the drag too, and then no later click would close the drawer.
+        // The drawer stays, to close on unfocus as usual. That only fires when focus leaves, and it may have
+        // left during the drag, when closing is held off: take it back, or no later click would close the drawer.
         Drag.onDragFinished: {
-            if (root.droppedOnDrawer) dlg.requestActivate();
-            else root.open = false;
-            root.droppedOnDrawer = false;
+            dlg.requestActivate();
+            refocusCheck.restart();
         }
     }
+    Timer { // focus refused: unfocused is closed
+        id: refocusCheck
+        interval: 250
+        onTriggered: if (root.open && dlg.hideOnWindowDeactivate && !dlg.active) root.open = false
+    }
     property bool dragging: false
-    property bool droppedOnDrawer: false
     function performDrag(handler) {
         if (!handler.active) {
             dragSource.Drag.active = false;
@@ -248,7 +251,7 @@ PlasmoidItem {
             if (railApplet()) items.push({ text: isOnRail(launcher) ? i18n("Unpin from Rail") : i18n("Pin to Rail"),
                                            icon: isOnRail(launcher) ? "window-unpin" : "window-pin", run: () => toggleRailPin(launcher) });
             if (canAddToDesktop()) items.push({ text: i18n("Add to Desktop"), icon: "list-add",
-                                                run: () => { addToDesktop(desktopIdOf(launcher)); root.open = false; } });
+                                                run: () => addToDesktop(desktopIdOf(launcher)) });
         }
         (runnerActions || []).forEach((a, i) => items.push({ text: a.text, icon: a.iconSource || "", run: () => runRunnerAction(i) }));
         for (const a of (kickerActions || [])) {
@@ -361,12 +364,6 @@ PlasmoidItem {
         width: root.drawerW
         height: root.drawerH
         Keys.onEscapePressed: root.open = false
-
-        DropArea { // a row let go over the drawer goes nowhere, so the drawer stays
-            anchors.fill: parent
-            enabled: root.dragging
-            onDropped: root.droppedOnDrawer = true
-        }
 
         readonly property bool searching: root.text.length > 0
 
