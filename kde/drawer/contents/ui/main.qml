@@ -23,6 +23,8 @@ PlasmoidItem {
 
     property string text: ""
     property bool open: false
+    property Item keyRow: null // the row the arrow keys are on while not searching
+    readonly property real selectedOpacity: 0.14
     property real anchorX: 68
     // Super (or any "activate launcher" shortcut) toggles the drawer; both signals can fire, so debounce
     property double lastToggle: 0
@@ -291,12 +293,47 @@ PlasmoidItem {
 
         readonly property bool searching: root.text.length > 0
 
+        // Rows of the idle view, top to bottom. Sections can swap places, so go by position.
+        function idleRows() {
+            const rows = [];
+            const walk = item => {
+                for (const c of item.children) {
+                    if (!c.visible) continue;
+                    if (typeof c.activate === "function") rows.push(c);
+                    else walk(c);
+                }
+            };
+            walk(idleCol);
+            return rows.map(r => ({ r: r, y: r.mapToItem(idleCol, 0, 0).y })).sort((a, b) => a.y - b.y).map(e => e.r);
+        }
+        function stepIdle(delta) {
+            const rows = idleRows();
+            if (!rows.length) return;
+            const i = rows.indexOf(root.keyRow);
+            const row = rows[i < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, i + delta))];
+            root.keyRow = row;
+            const top = row.mapToItem(idleCol, 0, 0).y;
+            const label = 32; // keep a section's title in view on the way up
+            if (top - label < idle.contentY) idle.contentY = Math.max(0, top - label);
+            else if (top + row.height > idle.contentY + idle.height) idle.contentY = top + row.height - idle.height;
+        }
+        function step(delta) {
+            if (searching) results.step(delta);
+            else stepIdle(delta);
+        }
+        function activateCurrent() {
+            if (searching) results.runCurrent();
+            else if (root.keyRow) root.keyRow.activate();
+        }
+
         Connections {
             target: root
             function onOpenChanged() {
                 if (root.open) {
                     field.text = "";
+                    results.moved = false;
                     results.currentIndex = 0;
+                    root.keyRow = null;
                     if (Plasmoid.configuration.showAllApps && allApps.count === 0) allApps.refresh();
                     field.forceActiveFocus();
                     idle.contentY = 0;
@@ -315,10 +352,10 @@ PlasmoidItem {
                 Layout.bottomMargin: 6
                 placeholderText: i18n("Search")
                 autoAccept: false
-                onTextChanged: { root.text = text; results.currentIndex = 0; }
-                Keys.onDownPressed: results.incrementCurrentIndex()
-                Keys.onUpPressed: results.decrementCurrentIndex()
-                onAccepted: results.runCurrent()
+                onTextChanged: { root.text = text; root.keyRow = null; results.moved = false; results.currentIndex = 0; }
+                Keys.onDownPressed: drawer.step(1)
+                Keys.onUpPressed: drawer.step(-1)
+                onAccepted: drawer.activateCurrent()
             }
 
             // ---- searching: KRunner results, grouped under their category
@@ -339,6 +376,17 @@ PlasmoidItem {
                     width: ListView.view.width
                     text: section
                 }
+                // Results arrive and reorder after each keystroke and the view follows the row it is on.
+                // Stay on the top one, the closest match, until the arrow keys move.
+                property bool moved: false
+                function keepFirst() { if (!moved && count > 0 && currentIndex !== 0) currentIndex = 0; }
+                onCountChanged: Qt.callLater(keepFirst)
+                onCurrentIndexChanged: Qt.callLater(keepFirst)
+                function step(delta) {
+                    moved = true;
+                    if (delta > 0) incrementCurrentIndex();
+                    else decrementCurrentIndex();
+                }
                 function runCurrent() {
                     if (count === 0) return;
                     if (search.run(search.index(Math.max(0, currentIndex), 0))) root.open = false;
@@ -358,7 +406,7 @@ PlasmoidItem {
                         anchors.fill: parent
                         radius: 12
                         color: Kirigami.Theme.textColor
-                        opacity: rh.hovered ? 0.1 : res.ListView.isCurrentItem ? 0.07 : 0
+                        opacity: res.ListView.isCurrentItem ? root.selectedOpacity : rh.hovered ? 0.1 : 0
                     }
                     RowLayout {
                         anchors.fill: parent
@@ -486,7 +534,8 @@ PlasmoidItem {
                                         readonly property string launcher: model.favoriteId ? "applications:" + model.favoriteId.replace(/^applications:/, "") : ""
                                         width: cat.width
                                         height: 40
-                                        Rectangle { anchors.fill: parent; radius: 12; color: Kirigami.Theme.textColor; opacity: apph.hovered ? 0.1 : 0 }
+                                        function activate() { cat.apps.trigger(app.index, "", null); root.open = false; }
+                                        Rectangle { anchors.fill: parent; radius: 12; color: Kirigami.Theme.textColor; opacity: root.keyRow === app ? root.selectedOpacity : apph.hovered ? 0.1 : 0 }
                                         RowLayout {
                                             anchors.fill: parent
                                             anchors.leftMargin: 10; anchors.rightMargin: 10
@@ -501,7 +550,7 @@ PlasmoidItem {
                                             }
                                         }
                                         HoverHandler { id: apph }
-                                        TapHandler { onTapped: { cat.apps.trigger(app.index, "", null); root.open = false; } }
+                                        TapHandler { onTapped: app.activate() }
                                         MouseArea {
                                             anchors.fill: parent
                                             acceptedButtons: Qt.RightButton
@@ -624,6 +673,7 @@ PlasmoidItem {
         readonly property bool active: model.IsActive === true
         readonly property bool pinned: model.IsLauncher === true || model.HasLauncher === true
         readonly property bool shown: run ? (running && Plasmoid.configuration.showRunning) : (!running && Plasmoid.configuration.showPinned)
+        function activate() { root.openApp(index, running, active, model.IsGroupParent === true); }
         // TaskMenu asks about audio; the drawer does not track streams
         readonly property bool hasAudioStream: false
         readonly property bool muted: false
@@ -636,7 +686,7 @@ PlasmoidItem {
             anchors.fill: parent
             radius: 12
             color: Kirigami.Theme.textColor
-            opacity: ah.hovered ? 0.1 : row.active && row.run ? 0.07 : 0
+            opacity: root.keyRow === row ? root.selectedOpacity : ah.hovered ? 0.1 : row.active && row.run ? 0.07 : 0
         }
         Rectangle {
             visible: row.run && row.active
@@ -669,8 +719,6 @@ PlasmoidItem {
             acceptedButtons: Qt.RightButton
             onClicked: root.openTaskMenu(row)
         }
-        TapHandler {
-            onTapped: root.openApp(row.index, row.running, row.active, row.model.IsGroupParent === true)
-        }
+        TapHandler { onTapped: row.activate() }
     }
 }
