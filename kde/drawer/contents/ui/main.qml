@@ -178,6 +178,49 @@ PlasmoidItem {
         });
     }
 
+    // ---- dragging a row out links it where it lands. One source for every row, as in Kickoff:
+    // a row can go away mid-drag when the model changes.
+    readonly property Item dragSource: Item {
+        Drag.dragType: Drag.Automatic
+        Drag.supportedActions: Qt.LinkAction | Qt.CopyAction
+        Drag.proposedAction: Qt.LinkAction
+        Drag.onActiveChanged: root.dragging = Drag.active
+        Drag.onDragFinished: dropAction => { if (dropAction !== Qt.IgnoreAction) root.open = false; }
+    }
+    property bool dragging: false
+    function performDrag(handler) {
+        if (!handler.active) {
+            dragSource.Drag.active = false;
+            dragSource.Drag.imageSource = "";
+            return;
+        }
+        const start = url => {
+            const u = url ? url.toString() : "";
+            if (!u) return;
+            handler.icon.grabToImage(result => {
+                if (!handler.active) return;
+                dragSource.Drag.imageSource = result.url;
+                // KIO asks Move, Copy or Link for a plain url list, but links a bookmark right away
+                dragSource.Drag.mimeData = {
+                    "text/uri-list": [url],
+                    "application/x-xbel": '<xbel><bookmark href="' + u.replace(/&/g, "&amp;").replace(/"/g, "&quot;") + '"/></xbel>'
+                };
+                dragSource.Drag.active = true;
+            });
+        };
+        if (handler.desktopId) withAppActions(handler.desktopId, (actions, url) => start(url));
+        else start(handler.url);
+    }
+    component RowDrag: DragHandler {
+        required property Item icon
+        property string desktopId: ""
+        property var url: ""
+        target: null
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+        enabled: desktopId.length > 0 || url.toString().length > 0
+        onActiveChanged: root.performDrag(this)
+    }
+
     // right-click on a running or pinned row
     function openTaskMenu(row) {
         const id = row.desktopId;
@@ -291,7 +334,7 @@ PlasmoidItem {
         visible: root.open
         visualParent: null
         location: PlasmaCore.Types.LeftEdge
-        hideOnWindowDeactivate: Plasmoid.configuration.closeWhenUnfocused
+        hideOnWindowDeactivate: Plasmoid.configuration.closeWhenUnfocused && !root.dragging
         flags: Qt.WindowStaysOnTopHint
         x: root.anchorX
         y: Screen.virtualY + 26
@@ -388,7 +431,9 @@ PlasmoidItem {
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
                 highlightMoveDuration: 0
+                interactive: Kirigami.Settings.hasTransientTouchInput // a mouse drag takes the row out
                 model: search
+                Kirigami.WheelHandler { target: results }
                 spacing: 2
                 section.property: "category"
                 section.criteria: ViewSection.FullString
@@ -433,7 +478,7 @@ PlasmoidItem {
                         anchors.fill: parent
                         anchors.leftMargin: 10; anchors.rightMargin: 6
                         spacing: 12
-                        Kirigami.Icon { source: res.model.decoration; Layout.preferredWidth: 24; Layout.preferredHeight: 24 }
+                        Kirigami.Icon { id: resIcon; source: res.model.decoration; Layout.preferredWidth: 24; Layout.preferredHeight: 24 }
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 0
@@ -466,6 +511,12 @@ PlasmoidItem {
                         }
                     }
                     HoverHandler { id: rh }
+                    RowDrag {
+                        icon: resIcon
+                        // a launcher not given as a file still has to be found
+                        desktopId: res.launcher.startsWith("applications:") && !res.urls[0].toString().startsWith("file:") ? root.desktopIdOf(res.launcher) : ""
+                        url: res.urls.length ? res.urls[0] : ""
+                    }
                     TapHandler {
                         onTapped: if (search.run(search.index(res.index, 0))) root.open = false
                     }
@@ -499,6 +550,8 @@ PlasmoidItem {
                 contentHeight: idleCol.implicitHeight
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
+                interactive: Kirigami.Settings.hasTransientTouchInput // a mouse drag takes the row out
+                Kirigami.WheelHandler { target: idle }
 
                 GridLayout {
                     id: idleCol
@@ -560,7 +613,7 @@ PlasmoidItem {
                                             anchors.fill: parent
                                             anchors.leftMargin: 10; anchors.rightMargin: 10
                                             spacing: 12
-                                            Kirigami.Icon { source: app.model.decoration; Layout.preferredWidth: Plasmoid.configuration.iconSize; Layout.preferredHeight: Plasmoid.configuration.iconSize }
+                                            Kirigami.Icon { id: appIcon; source: app.model.decoration; Layout.preferredWidth: Plasmoid.configuration.iconSize; Layout.preferredHeight: Plasmoid.configuration.iconSize }
                                             Text {
                                                 Layout.fillWidth: true
                                                 text: app.model.display || ""
@@ -570,6 +623,7 @@ PlasmoidItem {
                                             }
                                         }
                                         HoverHandler { id: apph }
+                                        RowDrag { icon: appIcon; url: app.model.url || "" }
                                         TapHandler { onTapped: app.activate() }
                                         MouseArea {
                                             anchors.fill: parent
@@ -722,7 +776,7 @@ PlasmoidItem {
             anchors.fill: parent
             anchors.leftMargin: 10; anchors.rightMargin: 10
             spacing: 12
-            Kirigami.Icon { source: row.model.decoration; Layout.preferredWidth: Plasmoid.configuration.iconSize; Layout.preferredHeight: Plasmoid.configuration.iconSize }
+            Kirigami.Icon { id: rowIcon; source: row.model.decoration; Layout.preferredWidth: Plasmoid.configuration.iconSize; Layout.preferredHeight: Plasmoid.configuration.iconSize }
             Text {
                 Layout.fillWidth: true
                 text: row.model.AppName || row.model.display
@@ -738,6 +792,7 @@ PlasmoidItem {
             }
         }
         HoverHandler { id: ah }
+        RowDrag { icon: rowIcon; desktopId: row.desktopId }
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.RightButton
