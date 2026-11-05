@@ -185,9 +185,16 @@ PlasmoidItem {
         Drag.supportedActions: Qt.LinkAction | Qt.CopyAction
         Drag.proposedAction: Qt.LinkAction
         Drag.onActiveChanged: root.dragging = Drag.active
-        Drag.onDragFinished: dropAction => { if (dropAction !== Qt.IgnoreAction) root.open = false; }
+        // Not by dropAction: the desktop never accepts a drop it hands to KIO, so a made link reads as ignored.
+        // Focus may have left during the drag too, and then no later click would close the drawer.
+        Drag.onDragFinished: {
+            if (root.droppedOnDrawer) dlg.requestActivate();
+            else root.open = false;
+            root.droppedOnDrawer = false;
+        }
     }
     property bool dragging: false
+    property bool droppedOnDrawer: false
     function performDrag(handler) {
         if (!handler.active) {
             dragSource.Drag.active = false;
@@ -354,6 +361,12 @@ PlasmoidItem {
         width: root.drawerW
         height: root.drawerH
         Keys.onEscapePressed: root.open = false
+
+        DropArea { // a row let go over the drawer goes nowhere, so the drawer stays
+            anchors.fill: parent
+            enabled: root.dragging
+            onDropped: root.droppedOnDrawer = true
+        }
 
         readonly property bool searching: root.text.length > 0
 
