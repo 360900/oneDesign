@@ -1,5 +1,10 @@
 # oneDesign
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="renders/desktop-dark.png">
+  <img alt="oneDesign desktop" src="renders/desktop-light.png">
+</picture>
+
 A design language for Linux. Calm, opaque content; glass only for what floats; one
 accent that tints everything; concentric rounded geometry; depth from hairlines and
 soft shadows. Themes KDE Plasma, Qt and GTK apps, window decorations, icons, and the
