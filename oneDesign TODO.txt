@@ -4,7 +4,7 @@ Status as of 2026-11-04, from commits through abed6fa.
 
 1. [done] fix: why is an open app in the pinned list in rail settings and why can't I remove it? it's gone after closing the app.
    3776861
-2. [done] implement: why is dark mode more transparent than white mode? white mode should be as transparent as dark mode because it looks better (one rail).
+2. [done] implement: why is dark mode more transparent than white mode? white mode should be as transparent as dark mode because it looks better (rail).
    820a09e
 3. [done] fix: pinned app ordering resets after reboot (I ordered them by drag).
    a58ea0d
@@ -26,7 +26,7 @@ Status as of 2026-11-04, from commits through abed6fa.
    Waiting on https://invent.kde.org/plasma/plasma-workspace/-/merge_requests/6958. As of 2026-11-03 it only adds reordering on the tray's Entries config page, not dragging between pop-up and panel.
 12. [done] fix: there should be no "notifications" tray icon since we have "One Notifications" widget in Rail.
    3725810
-13. [review] implement: users should be able to edit the one Rail in edit mode. everything made there should take effect immediately, just like kde panel. one exception: users shouldn't be able to create our panel or move them to top or bottom. just left and right (since it breaks horribly). if you can't do that, just make top and bottom not break horribly. even "show panel configuration" is broken and something takes up all the screen
+13. [review] implement: users should be able to edit the Rail in edit mode. everything made there should take effect immediately, just like kde panel. one exception: users shouldn't be able to create our panel or move them to top or bottom. just left and right (since it breaks horribly). if you can't do that, just make top and bottom not break horribly. even "show panel configuration" is broken and something takes up all the screen
    27cb27c (panel settings drive the rail, stands down in edit mode, left and right only). The log doesn't explicitly mention immediate effect or the full-screen "show panel configuration" bug.
 14. [partial] fix: some styles are broken or something. for example: /home/tarik/Pictures/Screenshots/Screenshot_20261103_151758.png and /home/tarik/Pictures/Screenshots/Screenshot_20261103_151855.png (unreadable text when selected) and /home/tarik/Pictures/Screenshots/Screenshot_20261103_151949.png (no padding before numbers in number boxes)
    Selected text fixed in fe9d3f2. Number box padding is still open: no commit touches it.

@@ -3,11 +3,11 @@
     "KPlugin": {
         "Authors": [{ "Name": "oneDesign" }],
         "Category": "Windows and Tasks",
-        "Description": "Workspace thumbnails and app column for the One rail",
+        "Description": "Workspace thumbnails and app column for the rail",
         "Icon": "view-pages-overview",
         "Id": "org.onedesign.rail",
         "License": "GPL-2.0-or-later",
-        "Name": "One Rail",
+        "Name": "Rail",
         "Version": "1.0"
     },
     "X-Plasma-API-Minimum-Version": "6.0"

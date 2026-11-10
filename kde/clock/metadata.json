@@ -3,7 +3,7 @@
     "KPlugin": {
         "Authors": [{ "Name": "oneDesign" }],
         "Category": "Date and Time",
-        "Description": "Hours over minutes, with the date, for the One rail",
+        "Description": "Hours over minutes, with the date, for the rail",
         "Icon": "clock",
         "Id": "org.onedesign.clock",
         "License": "GPL-2.0-or-later",

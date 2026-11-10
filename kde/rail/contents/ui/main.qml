@@ -10,7 +10,7 @@ import org.kde.plasma.workspace.dbus as DBus
 import org.kde.kirigami as Kirigami
 import org.kde.taskmanager as TaskManager
 
-// The One rail: workspace thumbnails on top, pinned and running apps below.
+// The rail: workspace thumbnails on top, pinned and running apps below.
 // Items keep their own size and stack from the top, so the panel never spreads them.
 PlasmoidItem {
     id: root
