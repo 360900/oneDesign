@@ -6,7 +6,6 @@ import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.extras as PlasmaExtras
 import org.kde.plasma.private.kicker as Kicker
 import org.kde.plasma.private.mpris as Mpris
-import org.kde.plasma.private.sessions as Sessions
 import org.kde.milou as Milou
 import org.kde.coreaddons as KCoreAddons
 import org.kde.kirigami as Kirigami
@@ -291,7 +290,6 @@ PlasmoidItem {
     }
 
     // ---- session
-    Sessions.SessionManagement { id: session }
     KCoreAddons.KUser { id: kuser }
     Kicker.SimpleFavoritesModel { id: settingsApp; favorites: ["systemsettings.desktop"] }
 
@@ -687,9 +685,7 @@ PlasmoidItem {
                 }
                 Repeater {
                     model: [
-                        { icon: "preferences-system-symbolic", tip: i18n("System Settings"), act: "settings", on: Plasmoid.configuration.showSettingsButton },
-                        { icon: "system-lock-screen-symbolic", tip: i18n("Lock"), act: "lock", on: Plasmoid.configuration.showLockButton && session.canLock },
-                        { icon: "system-shutdown-symbolic", tip: i18n("Shut Down…"), act: "power", on: Plasmoid.configuration.showPowerButton && session.canShutdown }
+                        { icon: "preferences-system-symbolic", tip: i18n("System Settings"), act: "settings", on: Plasmoid.configuration.showSettingsButton }
                     ].filter(b => b.on)
                     delegate: Item {
                         id: btnItem
@@ -715,8 +711,6 @@ PlasmoidItem {
                                 root.open = false;
                                 switch (btnItem.modelData.act) {
                                 case "settings": settingsApp.trigger(0, "", null); break;
-                                case "lock": session.lock(); break;
-                                case "power": session.requestShutdown(); break;
                                 }
                             }
                         }

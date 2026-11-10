@@ -15,8 +15,6 @@ KCM.SimpleKCM {
     property alias cfg_showUserRow: userRow.checked
     property alias cfg_showUserName: userName.checked
     property alias cfg_showSettingsButton: settings.checked
-    property alias cfg_showLockButton: lock.checked
-    property alias cfg_showPowerButton: power.checked
     property int cfg_drawerWidthDefault
     property int cfg_iconSizeDefault
     property bool cfg_showRunningDefault
@@ -28,8 +26,6 @@ KCM.SimpleKCM {
     property bool cfg_showUserRowDefault
     property bool cfg_showUserNameDefault
     property bool cfg_showSettingsButtonDefault
-    property bool cfg_showLockButtonDefault
-    property bool cfg_showPowerButtonDefault
 
     Kirigami.FormLayout {
         Item { Kirigami.FormData.isSection: true; Kirigami.FormData.label: i18n("Drawer") }
@@ -61,7 +57,5 @@ KCM.SimpleKCM {
         QQC.CheckBox { id: userRow; text: i18n("Show the bottom row") }
         QQC.CheckBox { id: userName; text: i18n("Show your name"); enabled: userRow.checked }
         QQC.CheckBox { id: settings; text: i18n("Show the settings button"); enabled: userRow.checked }
-        QQC.CheckBox { id: lock; text: i18n("Show the lock button"); enabled: userRow.checked }
-        QQC.CheckBox { id: power; text: i18n("Show the power button"); enabled: userRow.checked }
     }
 }

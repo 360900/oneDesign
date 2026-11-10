@@ -16,7 +16,5 @@
     <entry name="showUserRow" type="Bool"><default>true</default></entry>
     <entry name="showUserName" type="Bool"><default>true</default></entry>
     <entry name="showSettingsButton" type="Bool"><default>true</default></entry>
-    <entry name="showLockButton" type="Bool"><default>true</default></entry>
-    <entry name="showPowerButton" type="Bool"><default>true</default></entry>
   </group>
 </kcfg>
