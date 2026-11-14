@@ -417,6 +417,22 @@ PlasmoidItem {
         readonly property real thumbW: Math.min(48, width - 14)
         readonly property real thumbH: Math.round(thumbW * aspect)
 
+        // the workspace thumbnail an app tile is being dragged onto, -1 for none
+        property int dragDesktop: -1
+
+        // Which thumbnail is under a scene point, for app tiles dragged out of the app column.
+        // Windows are handled by the KWin script below; their pointer never reaches the rail.
+        function workspaceAt(sceneX, sceneY) {
+            if (!wsCol.visible) return -1;
+            for (let i = 0; i < wsRepeater.count; i++) {
+                const t = wsRepeater.itemAt(i);
+                if (!t) continue;
+                const p = t.mapFromItem(null, sceneX, sceneY);
+                if (p.x >= 0 && p.y >= 0 && p.x < t.width && p.y < t.height) return i;
+            }
+            return -1;
+        }
+
         // ---- where the thumbnails are, in panel coordinates, for the KWin script that switches workspaces
         // under a moved window (kde/workspacedrag): KWin holds the pointer then, so no hover reaches us
         function publishZones() {
@@ -494,7 +510,7 @@ PlasmoidItem {
                         Item {
                             id: face
                             anchors.fill: parent
-                            opacity: ws.current || hover.hovered || dragHover.containsDrag ? 1 : 0.72
+                            opacity: ws.current || hover.hovered || dragHover.containsDrag || rail.dragDesktop === ws.index ? 1 : 0.72
                             Behavior on opacity { NumberAnimation { duration: 120 } }
                             layer.enabled: true
                             layer.effect: MultiEffect {
@@ -578,6 +594,15 @@ PlasmoidItem {
                             color: "transparent"
                             border.width: 1
                             border.color: Qt.rgba(1, 1, 1, 0.25)
+                        }
+                        Rectangle { // an app is dragged over: it will move here
+                            anchors.fill: parent
+                            anchors.margins: -2
+                            radius: 9
+                            color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.22)
+                            border.width: 2
+                            border.color: root.accent
+                            visible: rail.dragDesktop === ws.index
                         }
                         Rectangle { // current: accent ring with a pale halo
                             anchors.fill: parent

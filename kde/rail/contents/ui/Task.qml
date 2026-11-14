@@ -112,14 +112,91 @@ Item {
         }
     }
 
-    // ---- drag to reorder
+    // ---- drag to reorder, or onto a workspace thumbnail to move the app there
     property int startIndex: 0
+    // window ids of the tile at drag start, so a reorder on the way does not change what moves
+    property var dragWinIds: []
+    readonly property bool canReorder: r.tasksModel.sortMode === TaskManager.TasksModel.SortManual
+    readonly property bool canDrag: canReorder || running
     readonly property real step: r.tile + view.spacing
+    // dx only triggers the drop target update: moving sideways off a thumbnail must clear it
+    readonly property real dx: dragH.active ? dragH.centroid.scenePosition.x - dragH.centroid.scenePressPosition.x : 0
     readonly property real dy: dragH.active ? dragH.centroid.scenePosition.y - dragH.centroid.scenePressPosition.y : 0
     readonly property int dir: view.verticalLayoutDirection === ListView.BottomToTop ? -1 : 1
-    onDyChanged: if (dragH.active) {
+    onDxChanged: updateDrag()
+    onDyChanged: updateDrag()
+
+    function winIdsAt(idx) {
+        const ids = [];
+        r.foreachChildTask(i => {
+            const list = r.tasksModel.data(i, TaskManager.AbstractTasksModel.WinIdList) || [];
+            for (const id of list) ids.push(String(id));
+        }, idx);
+        return ids;
+    }
+    function rowHasDragWindow(row) {
+        const index = r.tasksModel.makeModelIndex(row);
+        const n = r.tasksModel.rowCount(index);
+        if (n > 0) {
+            for (let i = 0; i < n; ++i) {
+                const ids = r.tasksModel.data(r.tasksModel.makeModelIndex(row, i), TaskManager.AbstractTasksModel.WinIdList) || [];
+                if (ids.some(id => dragWinIds.indexOf(String(id)) >= 0)) return true;
+            }
+            return false;
+        }
+        const ids = r.tasksModel.data(index, TaskManager.AbstractTasksModel.WinIdList) || [];
+        return ids.some(id => dragWinIds.indexOf(String(id)) >= 0);
+    }
+    function dragRow() {
+        for (let i = 0; i < r.tasksModel.count; ++i) {
+            if (rowHasDragWindow(i)) return i;
+        }
+        return -1;
+    }
+    function restoreOrder() {
+        if (!canReorder || !r.tasksModel.count) return;
+        // launchers have no windows to look up by, but their index is still valid while dragging
+        const row = dragWinIds.length ? dragRow() : index;
+        const to = Math.max(0, Math.min(r.tasksModel.count - 1, startIndex));
+        if (row >= 0 && row !== to) r.tasksModel.move(row, to);
+    }
+    function moveDragToDesktop(target) {
+        const deskId = r.virtualDesktopInfo.desktopIds[target];
+        if (deskId === undefined) return;
+        for (let i = 0; i < r.tasksModel.count; ++i) {
+            if (rowHasDragWindow(i)) r.tasksModel.requestVirtualDesktops(r.tasksModel.makeModelIndex(i), [deskId]);
+        }
+    }
+
+    function updateDrag() {
+        if (!dragH.active) return;
+        const railItem = r.fullRepresentationItem;
+        if (!railItem) return;
+        const p = dragH.centroid.scenePosition;
+        // launchers have no windows to move, but still reorder like before. Hovering a thumbnail
+        // does not switch to it: with "show only current desktop" the dragged tile would vanish.
+        const desktop = railItem.workspaceAt(p.x, p.y);
+        railItem.dragDesktop = running ? desktop : -1;
+        if (desktop >= 0) {
+            // going for a workspace is not a reorder: put the tile back where it started
+            restoreOrder();
+            return;
+        }
+        if (!canReorder) return;
         const t = Math.max(0, Math.min(r.tasksModel.count - 1, Math.round(startIndex + dir * dy / step)));
         if (t !== index) r.tasksModel.move(index, t);
+    }
+
+    function finishDrag() {
+        const railItem = r.fullRepresentationItem;
+        const target = railItem ? railItem.dragDesktop : -1;
+        if (railItem) railItem.dragDesktop = -1;
+        if (target >= 0 && running) {
+            moveDragToDesktop(target);
+            restoreOrder();
+        } else {
+            r.tasksModel.syncLaunchers(); // move() alone does not touch the launcher list
+        }
     }
 
     Item {
@@ -239,13 +316,19 @@ Item {
     HoverHandler { id: hover }
     DragHandler {
         id: dragH
-        enabled: r.tasksModel.sortMode === TaskManager.TasksModel.SortManual
+        enabled: task.canDrag
         target: null
         acceptedButtons: Qt.LeftButton
         xAxis.enabled: false
         onActiveChanged: {
-            if (active) { task.startIndex = task.index; task.hideToolTip(); }
-            else r.tasksModel.syncLaunchers(); // move() alone does not touch the launcher list
+            if (active) {
+                task.startIndex = task.index;
+                task.dragWinIds = task.winIdsAt(task.modelIndex());
+                task.hideToolTip();
+                task.updateDrag();
+            } else {
+                task.finishDrag();
+            }
         }
     }
     MouseArea { // accepts the click, so Plasma's own panel menu stays closed
@@ -285,5 +368,10 @@ Item {
             interval: 250
             onTriggered: task.isGroup ? task.r.openGroupList(task) : task.r.tasksModel.requestActivate(task.modelIndex())
         }
+    }
+
+    // the tile can vanish mid-drag when its window closes or its desktop filters it out
+    Component.onDestruction: {
+        if (dragH.active && task.r.fullRepresentationItem) task.r.fullRepresentationItem.dragDesktop = -1;
     }
 }
