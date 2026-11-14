@@ -20,8 +20,32 @@ function contains(g, x, y) {
     return x >= g.x && x < g.x + g.width && y >= g.y && y < g.y + g.height;
 }
 
+// An auto-hidden panel keeps its place while it is out of sight, so a hidden one does not count
 function dockAt(pos) {
-    return workspace.stackingOrder.find(w => w.dock && contains(w.frameGeometry, pos.x, pos.y)) || null;
+    return workspace.stackingOrder.find(w => w.dock && !w.hidden && contains(w.frameGeometry, pos.x, pos.y)) || null;
+}
+
+// KWin shows an auto-hidden panel for a pointer at the screen edge, but not while it moves a window.
+// The pointer at the edge of a hidden dock asks the rail to show itself until it leaves the dock.
+let revealed = null;
+
+function hiddenDockAtEdge(pos) {
+    return workspace.stackingOrder.find(w => {
+        if (!w.dock || !w.hidden || !contains(w.frameGeometry, pos.x, pos.y)) return false;
+        const g = w.frameGeometry;
+        const s = workspace.clientArea(KWin.FullScreenArea, w);
+        return (g.x <= s.x && pos.x <= s.x) || (g.x + g.width >= s.x + s.width && pos.x >= s.x + s.width - 1);
+    }) || null;
+}
+
+function reveal(window) {
+    const was = !!revealed;
+    revealed = window;
+    if (was === !!window) return;
+    callDBus("org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell", "evaluateScript",
+        'panels().forEach(function (p) { p.widgets().forEach(function (w) {'
+        + ' if (w.type == "org.onedesign.rail") { w.currentConfigGroup = ["General"]; w.writeConfig("revealForMove", ' + !!window + '); }'
+        + ' }); });');
 }
 
 // The rail's thumbnails are in panel coordinates and stay put when the panel changes length
@@ -57,6 +81,8 @@ function readZones() {
 
 function follow() {
     const pos = workspace.cursorPos;
+    if (!revealed) reveal(hiddenDockAtEdge(pos));
+    else if (!contains(revealed.frameGeometry, pos.x, pos.y)) reveal(null);
     const under = dockAt(pos);
     if (under !== dock) {
         dock = under;
@@ -80,6 +106,7 @@ function watch(window) {
         workspace.cursorPosChanged.disconnect(follow);
         dock = null;
         aim(-1);
+        reveal(null);
     });
 }
 

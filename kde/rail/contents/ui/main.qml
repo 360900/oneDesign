@@ -15,8 +15,10 @@ import org.kde.taskmanager as TaskManager
 PlasmoidItem {
     id: root
     preferredRepresentation: fullRepresentation
-    // Brings an auto-hidden panel back while an app asks for attention, as KDE's task manager does
-    Plasmoid.status: appModel.anyTaskDemandsAttention && Plasmoid.configuration.unhideOnAttention
+    // Brings an auto-hidden panel back while an app asks for attention, as KDE's task manager does, and
+    // holds it while a window moved by KWin is at its edge (see the workspacedrag script)
+    Plasmoid.status: Plasmoid.configuration.revealForMove ? PlasmaCore.Types.RequiresAttentionStatus
+        : appModel.anyTaskDemandsAttention && Plasmoid.configuration.unhideOnAttention
         ? PlasmaCore.Types.NeedsAttentionStatus : PlasmaCore.Types.PassiveStatus
 
     readonly property bool dark: Kirigami.Theme.textColor.hsvValue > 0.5
@@ -463,7 +465,10 @@ PlasmoidItem {
         target: Plasmoid
         function onLocationChanged() { Qt.callLater(root.keepSide) }
     }
-    Component.onCompleted: { recountMaximized(); stackDesktops(); keepSide(); }
+    Component.onCompleted: {
+        recountMaximized(); stackDesktops(); keepSide();
+        Plasmoid.configuration.revealForMove = false; // left over if the shell stopped during a move
+    }
 
     function currentIndex() {
         return vdi.desktopIds.indexOf(vdi.currentDesktop);

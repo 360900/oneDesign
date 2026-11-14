@@ -9,6 +9,8 @@
     <entry name="maxDesktops" type="Int"><default>6</default><min>1</min><max>12</max></entry>
     <!-- written by the rail, read by the workspacedrag KWin script -->
     <entry name="workspaceZones" type="String"><default></default></entry>
+    <!-- written by the workspacedrag KWin script: an auto-hidden rail shows itself while a moved window is at its edge -->
+    <entry name="revealForMove" type="Bool"><default>false</default></entry>
 
     <!-- layout -->
     <entry name="showWorkspaces" type="Bool"><default>true</default></entry>

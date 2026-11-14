@@ -16,7 +16,8 @@ import org.kde.taskmanager as TaskManager
 PlasmoidItem {
     id: root
     preferredRepresentation: fullRepresentation
-    Plasmoid.status: PlasmaCore.Types.ActiveStatus
+    // The drawer is a window of its own, not the panel's popup, so it holds an auto-hidden panel out itself
+    Plasmoid.status: root.open ? PlasmaCore.Types.RequiresAttentionStatus : PlasmaCore.Types.ActiveStatus
     toolTipMainText: i18n("Apps")
     hideOnWindowDeactivate: true
 
