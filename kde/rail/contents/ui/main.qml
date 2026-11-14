@@ -769,7 +769,14 @@ PlasmoidItem {
             ghost.y = p.y - ghost.offY;
             // off the rail sideways: KWin moves the window itself from here on
             if (p.x < 0 || p.x >= width) {
-                if (root.handOffDrag()) { railDrag.mine = false; return; }
+                if (root.handOffDrag()) {
+                    // KWin's move takes the release, so the handler would hold the pointer until the next
+                    // click, with no hover on the rail meanwhile: disabling its item lets go now
+                    railDrag.mine = false;
+                    dragLayer.enabled = false;
+                    Qt.callLater(() => dragLayer.enabled = true);
+                    return;
+                }
                 dragDesktop = -1;
                 root.setIncoming(null, -1);
                 root.restoreOrder(s);
