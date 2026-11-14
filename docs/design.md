@@ -33,7 +33,7 @@ control fully (shell theme, KWin blur, SDDM).
 |---|---|
 | Window canvas, sidebar, headerbar, dialog | solid |
 | Menus, popovers, tooltips | glass |
-| Shell (top bar, dock, quick settings, notifications), OSD | glass |
+| Shell (rail, quick settings, notifications), OSD | glass |
 
 ## Glass
 
@@ -78,4 +78,4 @@ App tiles on the rail (`rail.tile`) sit on the shell glass:
 | Focus | ring |
 | Entry | filled |
 | Headerbar | solid bar, centered title, close button only |
-| Shell | floating top bar + dock, squircle app icons |
+| Shell | rail on the screen edge with workspaces, apps and tray, squircle app icons |
