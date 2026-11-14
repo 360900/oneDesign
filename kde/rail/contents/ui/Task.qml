@@ -114,6 +114,7 @@ Item {
 
     // ---- drag to reorder, or onto a workspace thumbnail to move the app there
     property int startIndex: 0
+    property bool dragAlive: false
     // window ids of the tile at drag start, so a reorder on the way does not change what moves
     property var dragWinIds: []
     readonly property bool canReorder: r.tasksModel.sortMode === TaskManager.TasksModel.SortManual
@@ -173,25 +174,29 @@ Item {
         const railItem = r.fullRepresentationItem;
         if (!railItem) return;
         const p = dragH.centroid.scenePosition;
-        // launchers have no windows to move, but still reorder like before. Hovering a thumbnail
-        // does not switch to it: with "show only current desktop" the dragged tile would vanish.
+        // launchers have no windows to move, so they keep reordering even over a thumbnail.
+        // Hovering a thumbnail does not switch to it: with "show only current desktop" the
+        // dragged tile would vanish.
         const desktop = railItem.workspaceAt(p.x, p.y);
-        railItem.dragDesktop = running ? desktop : -1;
-        if (desktop >= 0) {
+        if (running && desktop >= 0) {
+            railItem.dragDesktop = desktop;
             // going for a workspace is not a reorder: put the tile back where it started
             restoreOrder();
             return;
         }
+        railItem.dragDesktop = -1;
         if (!canReorder) return;
         const t = Math.max(0, Math.min(r.tasksModel.count - 1, Math.round(startIndex + dir * dy / step)));
         if (t !== index) r.tasksModel.move(index, t);
     }
 
-    function finishDrag() {
+    function finishDrag(dropped) {
+        if (!dragAlive) return;
+        dragAlive = false;
         const railItem = r.fullRepresentationItem;
         const target = railItem ? railItem.dragDesktop : -1;
         if (railItem) railItem.dragDesktop = -1;
-        if (target >= 0 && running) {
+        if (dropped && target >= 0 && running) {
             moveDragToDesktop(target);
             restoreOrder();
         } else {
@@ -322,14 +327,26 @@ Item {
         xAxis.enabled: false
         onActiveChanged: {
             if (active) {
+                finishTimer.stop();
+                task.dragAlive = true;
                 task.startIndex = task.index;
                 task.dragWinIds = task.winIdsAt(task.modelIndex());
                 task.hideToolTip();
                 task.updateDrag();
             } else {
-                task.finishDrag();
+                // active drops before the grab is released or cancelled; both arrive right after
+                finishTimer.restart();
             }
         }
+        onGrabChanged: (transition, point) => {
+            if (transition === PointerDevice.UngrabExclusive) task.finishDrag(true);
+            else if (transition === PointerDevice.CancelGrabExclusive) task.finishDrag(false);
+        }
+    }
+    Timer { // a deactivation without a grab transition is no release, so it never moves windows
+        id: finishTimer
+        interval: 0
+        onTriggered: task.finishDrag(false)
     }
     MouseArea { // accepts the click, so Plasma's own panel menu stays closed
         anchors.fill: parent
@@ -372,6 +389,6 @@ Item {
 
     // the tile can vanish mid-drag when its window closes or its desktop filters it out
     Component.onDestruction: {
-        if (dragH.active && task.r.fullRepresentationItem) task.r.fullRepresentationItem.dragDesktop = -1;
+        if (task.dragAlive && task.r.fullRepresentationItem) task.r.fullRepresentationItem.dragDesktop = -1;
     }
 }
