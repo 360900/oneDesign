@@ -19,6 +19,14 @@ Item {
     readonly property var idx: r.tasksModel.makeModelIndex(owner.index, index)
     function modelIndex() { return idx; } // for the task menu
     readonly property bool active: model.IsActive === true
+    // the app's edge marks gather beside the focused window's entry
+    onActiveChanged: showFocus()
+    onIndexChanged: showFocus()
+    Component.onCompleted: showFocus()
+    function showFocus() {
+        if (active) owner.focusedRow = index;
+        else if (owner.focusedRow === index) owner.focusedRow = -1;
+    }
 
     property bool dragging: false
     property bool menuShown: false
@@ -37,6 +45,7 @@ Item {
     }
     Component.onDestruction: {
         hold(false);
+        if (owner.focusedRow === index) owner.focusedRow = -1;
         if (dragging) r.endWindowDrag([], false);
     }
 
@@ -58,8 +67,7 @@ Item {
         anchors.margins: entry.inset
         radius: Math.max(4, entry.r.tile * 0.26 - entry.inset)
         color: tap.pressed ? Qt.rgba(entry.r.accent.r, entry.r.accent.g, entry.r.accent.b, 0.25)
-               : hover.hovered ? (entry.r.dark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
-               : entry.active ? (entry.r.dark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.05)) : Qt.rgba(0, 0, 0, 0)
+               : hover.hovered ? (entry.r.dark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10)) : Qt.rgba(0, 0, 0, 0)
         Behavior on color { ColorAnimation { duration: 120 } }
     }
     Kirigami.Icon {

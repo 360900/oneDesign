@@ -58,6 +58,7 @@ Item {
                                        && ((!r.menuOpen && (hover.hovered || boxHover.hovered)) || holds > 0)
     property bool expanded: false
     property bool growUp: false
+    property int focusedRow: -1        // the entry of the focused window, set by the entries
     // entries are tiles like the apps, with the column's spacing between them
     property real entryH: r.tile
     readonly property int entryGap: Math.max(6, Plasmoid.configuration.appSpacing)
@@ -264,24 +265,37 @@ Item {
         Behavior on opacity { NumberAnimation { duration: 120 } }
         Behavior on y { enabled: !dragH.active; NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
-        // Running marks on the screen edge: one per window, up to four; the focused app's are longer
-        Column {
+        // Running marks on the screen edge: one per window, up to four; the focused app's are longer.
+        // While the box is open they gather into one beside the focused window's entry.
+        Item {
             id: marks
             x: 0
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 3
+            width: 3.5
+            height: parent.height
             visible: task.running && Plasmoid.configuration.showRunningIndicator
             readonly property int n: Math.min(4, Math.max(1, task.windows))
             readonly property real len: n === 1 ? (task.active ? 28 : 14) : (task.active ? 8 : 5)
+            readonly property int gap: 3
+            readonly property real total: n * len + (n - 1) * gap
+            readonly property bool merged: task.expanded && task.focusedRow >= 0
+            readonly property real mergedLen: Math.min(28, task.entryH - 8)
+            readonly property real mergedCenter: (task.growUp ? -task.extra + task.boxPad : task.r.tile + task.entryGap)
+                                                 + task.focusedRow * (task.entryH + task.entryGap) + task.entryH / 2
             Repeater {
                 model: marks.n
                 Rectangle {
+                    required property int index
                     width: 3.5
-                    height: marks.len
+                    y: marks.merged ? marks.mergedCenter - marks.mergedLen / 2
+                                    : (marks.height - marks.total) / 2 + index * (marks.len + marks.gap)
+                    height: marks.merged ? marks.mergedLen : marks.len
                     radius: 2
                     color: task.r.accent
-                    opacity: task.model.IsMinimized === true ? 0.5 : 1
-                    Behavior on height { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+                    opacity: !marks.merged && task.model.IsMinimized === true ? 0.5 : 1
+                    // emphasized: they travel together and settle
+                    Behavior on y { NumberAnimation { duration: 380; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.05, 0.7, 0.1, 1, 1, 1] } }
+                    Behavior on height { NumberAnimation { duration: 380; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.05, 0.7, 0.1, 1, 1, 1] } }
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
                     Rectangle { width: 2; height: parent.height; color: parent.color } // flat on the screen edge
                 }
             }
