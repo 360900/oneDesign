@@ -124,6 +124,18 @@ PlasmoidItem {
             iface: "org.kde.KWin.HighlightWindow", member: "highlightWindows",
             arguments: [hovered ? winIds.map(String) : []], signature: "(as)" });
     }
+    // a single window, by id, onto one desktop: window previews dragged onto a thumbnail
+    readonly property string windowMime: "application/x-onedesign-window"
+    function moveWindowToDesktop(winId, deskId) {
+        for (let i = 0; i < winModel.count; ++i) {
+            const index = winModel.makeModelIndex(i);
+            const ids = winModel.data(index, TaskManager.AbstractTasksModel.WinIdList) || [];
+            if (ids.some(id => String(id) === String(winId))) {
+                winModel.requestVirtualDesktops(index, [deskId]);
+                return;
+            }
+        }
+    }
     function cancelHighlightWindows() {
         if (Plasmoid.configuration.highlightWindows) windowsHovered([], false);
     }
@@ -605,7 +617,7 @@ PlasmoidItem {
                             color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.22)
                             border.width: 2
                             border.color: root.accent
-                            visible: rail.dragDesktop === ws.index
+                            visible: rail.dragDesktop === ws.index || (dragHover.containsDrag && dragHover.holdsWindow)
                         }
                         Rectangle { // current: accent ring with a pale halo
                             anchors.fill: parent
@@ -634,8 +646,19 @@ PlasmoidItem {
                         // hovering with a file, an app tile or anything else held switches without ending the drag
                         DropArea {
                             id: dragHover
+                            // a window preview from an app's tooltip: dropping it moves that window here
+                            property bool holdsWindow: false
                             anchors.fill: parent
                             enabled: !root.editMode
+                            onEntered: drag => holdsWindow = drag.hasFormat(root.windowMime)
+                            onExited: holdsWindow = false
+                            onDropped: drop => {
+                                const moving = holdsWindow;
+                                holdsWindow = false;
+                                if (!moving) return;
+                                root.moveWindowToDesktop(drop.getDataAsString(root.windowMime), ws.deskId);
+                                drop.accept(Qt.MoveAction);
+                            }
                         }
                         Timer {
                             interval: 350
