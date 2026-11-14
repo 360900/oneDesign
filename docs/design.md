@@ -63,7 +63,7 @@ App tiles on the rail (`rail.tile`) sit on the shell glass:
   over the apps beside it with the `elevation.float` shadow, so a focused app keeps its
   color as it opens. Focus inside the box is shown by the edge mark, not a fill.
 - **Hover and press.** A tint over the whole tile: ink at `rail.tile.hover` (black in
-  light, white in dark), accent at `rail.tile.pressed`, fading over `rail.tile.hoverMs`.
+  light, white in dark), accent at `rail.tile.pressed`, fading over `motion.fast`.
 
 ## Components
 
