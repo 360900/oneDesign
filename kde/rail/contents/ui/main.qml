@@ -594,6 +594,7 @@ PlasmoidItem {
         id: lengthTimer
         interval: 150 // let a maximize, restore or desktop switch settle first
         onTriggered: {
+            if (root.dragSpec) return; // resizing the panel under a held drag ends it; done when it ends
             if (root.shouldGrow && !root.rest) root.grow();
             else if (!root.shouldGrow && root.rest) {
                 if (root.editMode) { lengthAnim.stop(); root.putBack(); } // show the real settings right away
@@ -602,6 +603,7 @@ PlasmoidItem {
         }
     }
     onShouldGrowChanged: lengthTimer.restart()
+    onDragSpecChanged: if (!dragSpec) lengthTimer.restart()
 
     // ---- the rail lives on the left or right edge; a move to the top or bottom is sent back to its side
     property int side: PlasmaCore.Types.LeftEdge
