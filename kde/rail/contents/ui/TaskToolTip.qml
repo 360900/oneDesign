@@ -21,7 +21,14 @@ Item {
 
     required property var r
     required property Item task
-    property bool active: false        // thumbnails stream only while the tooltip shows
+    property bool active: false        // the pointer is on the app tile, or the tooltip was opened by a click
+    // Thumbnails stream while the tooltip is in use: the pointer on the tile or on the tooltip
+    // itself. A short hold covers the gap between tile and tooltip, so no placeholder flashes.
+    readonly property bool wanted: active || tipHover.hovered
+    property bool live: false
+    onWantedChanged: if (wanted) { liveHold.stop(); live = true; } else liveHold.restart()
+    Timer { id: liveHold; interval: 300; onTriggered: tip.live = false }
+    HoverHandler { id: tipHover }
 
     readonly property var m: task ? task.model : null
     readonly property bool isGroup: m ? m.IsGroupParent === true : false
@@ -169,7 +176,7 @@ Item {
             Loader {
                 id: thumb
                 anchors.fill: parent
-                active: tip.active && win.winId !== undefined && win.model.IsMinimized !== true
+                active: tip.live && win.winId !== undefined && win.model.IsMinimized !== true
                 sourceComponent: PipeWire.PipeWireSourceItem {
                     nodeId: request.nodeId
                     TaskManager.ScreencastingRequest { id: request; uuid: win.winId }
