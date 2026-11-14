@@ -210,7 +210,7 @@ PlasmoidItem {
         dragActiveWin = null;
     }
     // Off the rail the drag becomes a move of the window itself, by KWin: snapping and tiling as
-    // usual. The rest of a dragged app's windows come along after a desktop switch.
+    // usual. The rest of a dragged app's windows go with it, to each desktop the move goes to.
     function handOffDrag() {
         const s = dragSpec;
         if (!s || !s.winIds.length) return false;
@@ -220,20 +220,19 @@ PlasmoidItem {
             if (s.winIds.indexOf(w) >= 0) id = w;
         }
         if (!id) return false;
-        if (dragSwitched(s)) moveWindows(s.winIds, vdi.currentDesktop, true);
-        else restoreOrder(s);
+        restoreOrder(s);
         if (s.kind === "app") appModel.syncLaunchers();
         if (fullRepresentationItem) fullRepresentationItem.dragDesktop = -1;
         setIncoming(null, -1);
         dragSpec = null;
         dragActiveWin = null;
-        grabWindow(id);
+        grabWindow(id, s.winIds.filter(w => w !== id));
         return true;
     }
     // KWin moves the window under the held pointer: the workspacedrag script reads which one from
-    // grabWindow and starts the move from its shortcut
-    function grabWindow(id) {
-        Plasmoid.configuration.grabWindow = String(id);
+    // grabWindow, then the windows that go along, and starts the move from its shortcut
+    function grabWindow(id, along) {
+        Plasmoid.configuration.grabWindow = [String(id)].concat((along || []).map(String)).join(" ");
         DBus.SessionBus.asyncCall({ service: "org.kde.kglobalaccel", path: "/component/kwin",
             iface: "org.kde.kglobalaccel.Component", member: "invokeShortcut",
             arguments: ["onedesign-grab-window"], signature: "(s)" });
