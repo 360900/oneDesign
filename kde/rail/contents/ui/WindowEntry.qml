@@ -1,6 +1,7 @@
 /*
-    One window of a grouped app, in the app's expanded box. Hover shows its preview, click focuses
-    it, right-click opens its menu, middle-click closes it, and dragging it onto a workspace thumbnail moves just this window.
+    One window of an app, in the app's expanded box. Hover shows its preview, click focuses it,
+    right-click opens its menu, middle-click closes it. Drag it within the box to reorder, onto a
+    workspace thumbnail to move just this window there, or onto the same app on another workspace.
 */
 import QtQuick
 import org.kde.plasma.plasmoid
@@ -14,28 +15,42 @@ Item {
     required property int index
     required property var model
     required property Item owner   // the app's tile
+    property bool single: false    // the app's only window: the tile's own task, not a group child
     readonly property var r: owner.r
-    readonly property var winId: (model.WinIdList || [])[0]
-    readonly property var idx: r.tasksModel.makeModelIndex(owner.index, index)
+    readonly property var win: single ? owner.model : model
+    readonly property var winId: (win.WinIdList || [])[0]
+    readonly property var idx: single ? owner.modelIndex() : r.tasksModel.makeModelIndex(owner.index, index)
     function modelIndex() { return idx; } // for the task menu
-    readonly property bool active: model.IsActive === true
+    readonly property bool active: win.IsActive === true
+
+    // where it sits in the box: past a dragged window of the group, and making room for an incoming one
+    readonly property bool dragged: index === owner.draggedRow
+    readonly property int pos: {
+        let p = index - (owner.draggedRow >= 0 && index > owner.draggedRow ? 1 : 0);
+        return owner.incomingSlot >= 0 && p >= owner.incomingSlot ? p + 1 : p;
+    }
+    visible: !dragged
+    y: owner.slotY(pos)
+    Behavior on y { NumberAnimation { duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1] } }
+
     // the app's edge marks gather beside the focused window's entry
-    onActiveChanged: showFocus()
-    onIndexChanged: showFocus()
+    property bool focusShown: false
+    readonly property bool showsFocus: active && !dragged
+    onShowsFocusChanged: showFocus()
+    onPosChanged: showFocus()
     Component.onCompleted: showFocus()
     function showFocus() {
-        if (active) owner.focusedRow = index;
-        else if (owner.focusedRow === index) owner.focusedRow = -1;
+        if (showsFocus) { owner.focusedRow = pos; focusShown = true; }
+        else if (focusShown) { if (owner.focusedRow === pos) owner.focusedRow = -1; focusShown = false; }
     }
 
-    property bool dragging: false
     property bool menuShown: false
     Connections {
         target: entry.r
         function onMenuOpenChanged() { if (!entry.r.menuOpen) entry.menuShown = false; }
     }
-    // keeps the box open while the pointer is here, on this window's preview, dragging it or in its menu
-    readonly property bool busy: hover.hovered || tip.hovered || dragging || menuShown
+    // keeps the box open while the pointer is here, on this window's preview or in its menu
+    readonly property bool busy: hover.hovered || tip.hovered || menuShown
     property bool counted: false
     onBusyChanged: hold(busy)
     function hold(on) {
@@ -45,8 +60,7 @@ Item {
     }
     Component.onDestruction: {
         hold(false);
-        if (owner.focusedRow === index) owner.focusedRow = -1;
-        if (dragging) r.endWindowDrag([], false);
+        if (focusShown && owner.focusedRow === pos) owner.focusedRow = -1;
     }
 
     width: r.tile
@@ -55,7 +69,7 @@ Item {
     function activate() {
         const tm = r.tasksModel;
         r.cancelHighlightWindows();
-        if (model.IsMinimized === true) { tm.requestToggleMinimized(idx); tm.requestActivate(idx); }
+        if (win.IsMinimized === true) { tm.requestToggleMinimized(idx); tm.requestActivate(idx); }
         else if (active && Plasmoid.configuration.minimizeActiveTaskOnClick) tm.requestToggleMinimized(idx);
         else tm.requestActivate(idx);
     }
@@ -71,14 +85,14 @@ Item {
         width: Math.min(Plasmoid.configuration.iconSize, entry.height - 8)
         height: width
         roundToIconSize: false
-        source: entry.model.decoration
-        opacity: entry.model.IsMinimized === true ? 0.5 : 1
+        source: entry.win.decoration
+        opacity: entry.win.IsMinimized === true ? 0.5 : 1
     }
 
     PlasmaCore.ToolTipArea {
         id: tipArea
         anchors.fill: parent
-        active: !entry.dragging && !entry.r.menuOpen
+        active: !entry.r.dragSpec && !entry.r.menuOpen
         location: Plasmoid.location
         interactive: true
         mainItem: TaskToolTip {
@@ -86,7 +100,7 @@ Item {
             r: entry.r
             task: entry.owner
             child: entry.index
-            childModel: entry.model
+            childModel: entry.win
             hideFn: () => tipArea.hideImmediately()
             active: tipArea.containsMouse
         }
@@ -95,8 +109,7 @@ Item {
     HoverHandler {
         id: hover
         onHoveredChanged: {
-            entry.r.windowsHovered(entry.model.WinIdList, hovered);
-            if (hovered) card.refresh(); // the drag image has to be ready before a drag starts
+            entry.r.windowsHovered(entry.win.WinIdList, hovered);
         }
     }
     TapHandler {
@@ -118,32 +131,14 @@ Item {
         }
     }
 
-    DragCard {
-        id: card
-        x: -10000 // out of view, only grabbed
-        icon: entry.model.decoration
-        title: entry.model.display || ""
-    }
-    // onto a workspace thumbnail moves just this window there; over one switches, and a drop
-    // anywhere after that brings the window along
-    Drag.dragType: Drag.Automatic
-    Drag.supportedActions: Qt.MoveAction
-    Drag.mimeData: ({ [entry.r.windowMime]: String(entry.winId) })
-    Drag.imageSource: card.image
-    Drag.hotSpot: Qt.point(card.pad + 24, card.pad + 22)
-    Drag.active: dragH.active
-    Drag.onDragFinished: dropAction => {
-        entry.dragging = false;
-        entry.r.endWindowDrag([String(entry.winId)], dropAction === Qt.IgnoreAction);
-    }
     DragHandler {
         id: dragH
         target: null
         enabled: entry.winId !== undefined
-        onActiveChanged: if (active && !entry.dragging) {
-            entry.dragging = true;
+        onActiveChanged: if (active) {
             tipArea.hideImmediately();
-            entry.r.beginWindowDrag();
+            entry.r.startDrag({ kind: "window", winIds: [String(entry.winId)], launcher: entry.owner.launcher },
+                              entry.win.decoration, entry.win.display, () => dragH.active);
         }
     }
 }

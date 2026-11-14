@@ -33,7 +33,7 @@ PlasmoidItem {
     readonly property color tileLifted: Qt.tint(fill, Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.94))
     readonly property color tileHover: dark ? Qt.rgba(1, 1, 1, 0.09) : Qt.rgba(0, 0, 0, 0.06)
     readonly property color tilePressed: Qt.rgba(accent.r, accent.g, accent.b, 0.25)
-    readonly property int tileHoverDuration: 180
+    readonly property int tileHoverDuration: 120 // motion.fast
 
     // shared with Task, TaskMenu and TaskToolTip
     readonly property alias tasksModel: appModel
@@ -47,7 +47,6 @@ PlasmoidItem {
     property bool menuOpen: false
     // the desktop an app tile drag started on: the app column stays on it while the drag
     // switches desktops, so the dragged tile keeps its place. null when no drag runs.
-    property var dragFromDesktop: null
     // the grouped app whose box is open over the apps around it, and the span it covers in the
     // app column; the apps under it step aside
     property Item stackTask: null
@@ -80,7 +79,7 @@ PlasmoidItem {
     TaskManager.TasksModel {
         id: appModel
         readonly property bool manual: sortMode === TaskManager.TasksModel.SortManual
-        virtualDesktop: root.dragFromDesktop ?? vdi.currentDesktop
+        virtualDesktop: vdi.currentDesktop
         activity: activityInfo.currentActivity
         screenGeometry: Plasmoid.containment.screenGeometry
         filterByVirtualDesktop: Plasmoid.configuration.showOnlyCurrentDesktop
@@ -137,9 +136,19 @@ PlasmoidItem {
             iface: "org.kde.KWin.HighlightWindow", member: "highlightWindows",
             arguments: [hovered ? winIds.map(String) : []], signature: "(as)" });
     }
-    // ---- moving windows between desktops by drag: app tiles, window entries and window previews
+    // ---- dragging apps and windows: app tiles, window entries and window previews
+    // A drag is a platform drag from a source that outlives the tiles (the rail's drag card), so the
+    // app column can follow the desktop the drag switches to. The rail's drop area does the rest.
     readonly property string windowMime: "application/x-onedesign-window"
+    // { kind: "app" | "window", winIds, launcher, icon, fromDesktop, startRow }; null when no drag runs
+    property var dragSpec: null
     property var dragActiveWin: null // the window that had focus when the drag started
+    property Item incomingTask: null // an app of the same kind the drag hovers: it opens with a slot
+    property int incomingSlot: -1
+    function setIncoming(t, slot) {
+        incomingTask = t;
+        incomingSlot = t ? slot : -1;
+    }
 
     function winIdOf(index) {
         const ids = winModel.data(index, TaskManager.AbstractTasksModel.WinIdList) || [];
@@ -149,19 +158,110 @@ PlasmoidItem {
         const a = winModel.activeTask;
         return a && a.valid ? winIdOf(a) : null;
     }
-    function beginWindowDrag() {
+    function launcherOf(index) {
+        return String(appModel.data(index, TaskManager.AbstractTasksModel.LauncherUrlWithoutIcon) || "");
+    }
+    // the app column row holding the dragged windows, or the dragged launcher
+    function dragRow(s) {
+        const R = TaskManager.AbstractTasksModel;
+        for (let i = 0; i < appModel.count; ++i) {
+            const index = appModel.makeModelIndex(i);
+            if (!s.winIds.length) {
+                if (appModel.data(index, R.IsLauncher) === true && launcherOf(index) === s.launcher) return i;
+                continue;
+            }
+            const n = appModel.rowCount(index);
+            const kids = n > 0 ? [...Array(n).keys()].map(c => appModel.makeModelIndex(i, c)) : [index];
+            if (kids.some(k => (appModel.data(k, R.WinIdList) || []).some(id => s.winIds.indexOf(String(id)) >= 0))) return i;
+        }
+        return -1;
+    }
+    function dragSwitched(s) {
+        return String(vdi.currentDesktop) !== String(s.fromDesktop);
+    }
+    // takes back a reorder of the dragged app, when the drag ends somewhere else
+    function restoreOrder(s) {
+        if (!s || s.kind !== "app" || !appModel.manual || dragSwitched(s) || s.startRow < 0) return;
+        const row = dragRow(s);
+        const to = Math.max(0, Math.min(appModel.count - 1, s.startRow));
+        if (row >= 0 && row !== to) appModel.move(row, to);
+    }
+
+    // Starts a drag once its card is drawn. spec: kind, winIds, launcher. stillHeld tells whether
+    // the button is still down by then.
+    function startDrag(spec, icon, title, stillHeld) {
+        const rail = fullRepresentationItem;
+        if (!rail || dragSpec) return;
+        rail.dragCard.icon = icon;
+        rail.dragCard.title = title || "";
+        rail.dragCard.grabToImage(result => {
+            let held = false;
+            try { held = stillHeld(); } catch (e) {} // the tile may be gone by now
+            if (!held) return;
+            beginDrag(Object.assign({ icon: icon }, spec));
+            rail.dragCard.Drag.imageSource = result.url;
+            rail.dragCard.Drag.active = true; // runs until the drop
+        });
+    }
+    // for drags with their own source (window previews in a tooltip)
+    function beginDrag(spec) {
         cancelHighlightWindows();
         dragActiveWin = activeWinId();
-        // the app column stays on this desktop while the drag switches desktops, so what is being
-        // dragged keeps its place
-        dragFromDesktop = vdi.currentDesktop;
+        spec.fromDesktop = vdi.currentDesktop;
+        spec.startRow = spec.kind === "app" ? dragRow(spec) : -1;
+        dragSpec = spec;
     }
-    // where a drag that ended anywhere but a thumbnail takes its windows: along to the desktop it switched to
-    function endWindowDrag(winIds, dropped) {
-        if (dropped && dragFromDesktop !== null && String(vdi.currentDesktop) !== String(dragFromDesktop))
-            moveWindows(winIds, vdi.currentDesktop, true);
-        dragFromDesktop = null;
+    // dropAction is what the drop target did: nothing when the drag ended off the rail or was cancelled
+    function finishDrag(dropAction) {
+        const s = dragSpec;
+        if (!s) return;
+        if (dropAction === Qt.IgnoreAction) {
+            // off the rail: after a desktop switch the windows come along, else a reorder is taken back
+            if (dragSwitched(s)) moveWindows(s.winIds, vdi.currentDesktop, true);
+            else restoreOrder(s);
+        }
+        if (s.kind === "app") appModel.syncLaunchers(); // move() alone does not touch the launcher list
+        if (fullRepresentationItem) fullRepresentationItem.dragDesktop = -1;
+        setIncoming(null, -1);
+        dragSpec = null;
         dragActiveWin = null;
+    }
+
+    // Puts windows at a place in their app's group, once they have joined it (a move to this
+    // desktop arrives a little later)
+    property var pendingPlace: null
+    function placeWindows(winIds, launcher, slot) {
+        pendingPlace = { winIds: winIds.map(String), launcher: launcher, slot: slot, tries: 0 };
+        placeTimer.restart();
+    }
+    Timer {
+        id: placeTimer
+        interval: 60
+        repeat: true
+        onTriggered: {
+            const p = root.pendingPlace;
+            if (!p || ++p.tries > 25 || root.tryPlace(p)) { root.pendingPlace = null; stop(); }
+        }
+    }
+    function tryPlace(p) {
+        const R = TaskManager.AbstractTasksModel;
+        for (let i = 0; i < appModel.count; ++i) {
+            const g = appModel.makeModelIndex(i);
+            if (appModel.data(g, R.IsGroupParent) !== true || launcherOf(g) !== p.launcher) continue;
+            const rowOf = id => {
+                for (let c = 0; c < appModel.rowCount(g); ++c)
+                    if ((appModel.data(appModel.makeModelIndex(i, c), R.WinIdList) || []).some(w => String(w) === id)) return c;
+                return -1;
+            };
+            if (p.winIds.some(id => rowOf(id) < 0)) return false;
+            p.winIds.forEach((id, k) => {
+                const from = rowOf(id);
+                const to = Math.min(appModel.rowCount(g) - 1, p.slot + k);
+                if (from !== to) appModel.move(from, to, g);
+            });
+            return true;
+        }
+        return false;
     }
 
     // Moves windows onto one desktop and goes there, keeping their focus: the one that had focus has
@@ -517,6 +617,79 @@ PlasmoidItem {
             z: 100
         }
 
+        // ---- drags of apps and windows (see root.startDrag): the source, and where they land
+        readonly property Item dragCard: dragCardItem
+        DragCard {
+            id: dragCardItem
+            x: -10000 // out of view: only its image is shown, under the pointer
+            Drag.dragType: Drag.Automatic
+            Drag.supportedActions: Qt.MoveAction
+            Drag.mimeData: ({ [root.windowMime]: "rail" })
+            Drag.hotSpot: Qt.point(pad + 24, pad + 22)
+            Drag.onDragFinished: dropAction => root.finishDrag(dropAction)
+        }
+        DropArea {
+            parent: stackLayerItem // above the app column and the boxes, which keep it from drops past its edges
+            anchors.fill: parent
+            z: 1
+            keys: [root.windowMime]
+            onEntered: drag => rail.dragMoved(drag.x, drag.y)
+            onPositionChanged: drag => rail.dragMoved(drag.x, drag.y)
+            onExited: { rail.dragDesktop = -1; root.setIncoming(null, -1); root.restoreOrder(root.dragSpec); }
+            onDropped: drop => {
+                rail.dragDropped(drop.x, drop.y);
+                drop.accept(Qt.MoveAction);
+                root.finishDrag(Qt.MoveAction); // done here, before any leave that follows
+            }
+        }
+        // the app's tile, or the open box, under a point of the rail
+        function taskAt(x, y) {
+            const p = mapToItem(null, x, y);
+            const open = root.stackTask;
+            if (open && open.boxContains(p.x, p.y)) return open;
+            const c = appCol.mapFromItem(rail, x, y);
+            if (c.x < 0 || c.y < 0 || c.x >= appCol.width || c.y >= appCol.height) return null;
+            const t = appCol.itemAt(c.x + appCol.contentX, c.y + appCol.contentY);
+            return t && !t.covered && t.shown ? t : null;
+        }
+        function dragMoved(x, y) {
+            const s = root.dragSpec;
+            if (!s) return;
+            const p = mapToItem(null, x, y);
+            // a thumbnail: windows go there on drop, and a dwell goes there now; launchers have no windows
+            const desk = s.winIds.length ? workspaceAt(p.x, p.y) : -1;
+            dragDesktop = desk;
+            if (desk >= 0) { root.setIncoming(null, -1); root.restoreOrder(s); return; }
+            const t = taskAt(x, y);
+            // the same app, other than the one dragged: it opens with a place for what comes
+            if (t && s.winIds.length && t.launcher === s.launcher && (s.kind === "window" || !t.holdsDragged)) {
+                root.setIncoming(t, t.slotAt(p.x, p.y));
+                return;
+            }
+            root.setIncoming(null, -1);
+            // an app over the others: live reorder
+            if (s.kind === "app" && root.tasksModel.manual && t) {
+                const row = root.dragRow(s);
+                if (row >= 0 && t.index !== row) root.tasksModel.move(row, t.index);
+            }
+        }
+        function dragDropped(x, y) {
+            const s = root.dragSpec;
+            if (!s) return;
+            const p = mapToItem(null, x, y);
+            const desk = s.winIds.length ? workspaceAt(p.x, p.y) : -1;
+            if (desk >= 0) {
+                root.restoreOrder(s);
+                root.moveWindows(s.winIds, root.virtualDesktopInfo.desktopIds[desk], false);
+                return;
+            }
+            const t = root.incomingTask;
+            const slot = root.incomingSlot;
+            // anywhere else on the rail brings the windows to this desktop
+            if (root.dragSwitched(s) || t) root.moveWindows(s.winIds, root.virtualDesktopInfo.currentDesktop, true);
+            if (t) root.placeWindows(s.winIds, s.launcher, slot);
+        }
+
         // the workspace thumbnail an app tile is being dragged onto, -1 for none
         property int dragDesktop: -1
 
@@ -702,7 +875,7 @@ PlasmoidItem {
                             color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.22)
                             border.width: 2
                             border.color: root.accent
-                            visible: rail.dragDesktop === ws.index || (dragHover.containsDrag && dragHover.holdsWindow)
+                            visible: rail.dragDesktop === ws.index
                         }
                         Rectangle { // current: accent ring with a pale halo
                             anchors.fill: parent
@@ -729,21 +902,10 @@ PlasmoidItem {
                             onClicked: root.openWorkspaceMenu(ws)
                         }
                         // hovering with a file, an app tile or anything else held switches without ending the drag
-                        DropArea {
+                        DropArea { // apps and windows are taken by the rail's own drop area, see dragMoved
                             id: dragHover
-                            // a window preview from an app's tooltip: dropping it moves that window here
-                            property bool holdsWindow: false
                             anchors.fill: parent
                             enabled: !root.editMode
-                            onEntered: drag => holdsWindow = drag.hasFormat(root.windowMime)
-                            onExited: holdsWindow = false
-                            onDropped: drop => {
-                                const moving = holdsWindow;
-                                holdsWindow = false;
-                                if (!moving) return;
-                                root.moveWindows([drop.getDataAsString(root.windowMime)], ws.deskId, false);
-                                drop.accept(Qt.MoveAction);
-                            }
                         }
                         Timer {
                             interval: 350

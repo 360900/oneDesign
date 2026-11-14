@@ -22,16 +22,15 @@ Item {
     required property var r
     required property Item task
     property bool active: false        // the pointer is on the app tile, or the tooltip was opened by a click
-    property bool dragging: false      // a window preview is being dragged out
     // one window of a group only, for its entry in the app's expanded box: its row and model data
     property int child: -1
     property var childModel: null
     property var hideFn: null          // closes the tooltip this sits in, when not the app tile's
-    readonly property bool hovered: tipHover.hovered || dragging
+    readonly property bool hovered: tipHover.hovered
     function hide() { if (hideFn) hideFn(); else task.hideToolTip(); }
-    // Thumbnails stream while the tooltip is in use: the pointer on the tile, on the tooltip itself or
-    // dragging out of it. A short hold covers the gap between tile and tooltip, so no placeholder flashes.
-    readonly property bool wanted: active || dragging || tipHover.hovered
+    // Thumbnails stream while the tooltip is in use: the pointer on the tile or on the tooltip itself.
+    // A short hold covers the gap between tile and tooltip, so no placeholder flashes.
+    readonly property bool wanted: active || tipHover.hovered
     property bool live: false
     onWantedChanged: if (wanted) { liveHold.stop(); live = true; } else liveHold.restart()
     Timer { id: liveHold; interval: 300; onTriggered: tip.live = false }
@@ -156,7 +155,6 @@ Item {
         readonly property real thumbW: Kirigami.Units.gridUnit * 14
         spacing: Kirigami.Units.smallSpacing
         // the entry can go away mid-drag when its window closes
-        Component.onDestruction: if (tip.dragging) { tip.dragging = false; tip.r.endWindowDrag([], false); }
         Layout.margins: Kirigami.Units.smallSpacing
 
         RowLayout {
@@ -209,35 +207,18 @@ Item {
             }
             HoverHandler {
                 id: winHover
-                onHoveredChanged: {
-                    tip.r.windowsHovered(win.model.WinIdList, hovered);
-                    if (hovered) card.refresh(); // the drag image has to be ready before a drag starts
-                }
+                onHoveredChanged: tip.r.windowsHovered(win.model.WinIdList, hovered)
             }
-            DragCard {
-                id: card
-                x: -10000 // out of view, only grabbed
-                icon: win.model.decoration
-                title: win.model.display || ""
-            }
-            // drag the preview onto a workspace thumbnail to move just this window there, or over one
-            // to switch and then anywhere to bring the window along
-            Drag.dragType: Drag.Automatic
-            Drag.supportedActions: Qt.MoveAction
-            Drag.mimeData: ({ [tip.r.windowMime]: String(win.winId) })
-            Drag.imageSource: card.image
-            Drag.hotSpot: Qt.point(card.pad + 24, card.pad + 22)
-            Drag.active: winDrag.active
-            Drag.onDragFinished: dropAction => {
-                tip.dragging = false;
-                // a thumbnail takes the drop itself; anywhere else counts as a drop on this desktop
-                tip.r.endWindowDrag([String(win.winId)], dropAction === Qt.IgnoreAction);
-            }
+            // drag the preview like the window's entry: onto a workspace thumbnail, or the same app
+            // on another workspace (see root.startDrag)
             DragHandler {
                 id: winDrag
                 target: null
                 enabled: win.winId !== undefined
-                onActiveChanged: if (active && !tip.dragging) { tip.dragging = true; tip.r.beginWindowDrag(); }
+                onActiveChanged: if (active) {
+                    tip.r.startDrag({ kind: "window", winIds: [String(win.winId)], launcher: tip.task.launcher },
+                                    win.model.decoration, win.model.display, () => winDrag.active);
+                }
             }
             TapHandler {
                 acceptedButtons: Qt.LeftButton

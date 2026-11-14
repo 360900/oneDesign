@@ -48,22 +48,65 @@ Item {
     width: ListView.view ? ListView.view.width : 0
     height: shown ? r.tile : 0
     visible: shown
-    z: dragH.active ? 10 : reveal > 0 ? 5 : 0
+    z: reveal > 0 ? 5 : 0
+    readonly property string launcher: String(model.LauncherUrlWithoutIcon || "")
+
+    // ---- dragged: the app itself, or one of its windows (see root.startDrag)
+    property bool holdsDragged: false  // holds a dragged window, or is the dragged launcher
+    property int draggedRow: -1        // the entry of a dragged window
+    function updateDragged() {
+        const s = r.dragSpec;
+        draggedRow = -1;
+        if (!s) { holdsDragged = false; return; }
+        if (!s.winIds.length) { holdsDragged = isLauncher && launcher === s.launcher; return; }
+        const kids = isGroup ? [...Array(r.tasksModel.rowCount(modelIndex())).keys()].map(c => r.tasksModel.makeModelIndex(index, c)) : [modelIndex()];
+        const k = kids.findIndex(i => (r.tasksModel.data(i, TaskManager.AbstractTasksModel.WinIdList) || []).some(id => s.winIds.indexOf(String(id)) >= 0));
+        holdsDragged = k >= 0;
+        if (k >= 0 && s.kind === "window" && isGroup) draggedRow = k;
+    }
+    Connections {
+        target: task.r
+        function onDragSpecChanged() { task.updateDragged() }
+    }
+    onIndexChanged: if (r.dragSpec) updateDragged()
+    onWindowsChanged: if (r.dragSpec) updateDragged()
+    // the dragged app keeps its place in the column, faint
+    readonly property bool dragged: r.dragSpec !== null && r.dragSpec.kind === "app" && holdsDragged
 
     // ---- grouped apps: on hover the tile grows into a box with one entry per window, over the
-    // apps next to it
+    // apps next to it. A dragged window or app of the same kind opens it too, with a slot for it.
+    readonly property bool receiving: r.incomingTask === task
+    readonly property int incomingSlot: receiving ? r.incomingSlot : -1
     readonly property bool canExpand: isGroup && windows > 1
-    property int holds: 0              // entries that keep the box open: hovered, previewed or dragged
-    readonly property bool wantExpand: canExpand && !dragH.active && !r.editMode
-                                       && ((!r.menuOpen && (hover.hovered || boxHover.hovered)) || holds > 0)
+    property int holds: 0              // entries that keep the box open: hovered, previewed or in a menu
+    readonly property bool wantExpand: (canExpand || receiving) && !r.editMode
+        && (receiving || (r.dragSpec !== null && r.dragSpec.kind === "window" && holdsDragged)
+            || (r.dragSpec === null && ((!r.menuOpen && (hover.hovered || boxHover.hovered)) || holds > 0)))
     property bool expanded: false
     property bool growUp: false
-    property int focusedRow: -1        // the entry of the focused window, set by the entries
+    property int focusedRow: -1        // where the focused window's entry is, set by the entries
     // entries are tiles like the apps, with the column's spacing between them
     property real entryH: r.tile
     readonly property int entryGap: Math.max(6, Plasmoid.configuration.appSpacing)
+    readonly property real entryStep: entryH + entryGap
     readonly property int boxPad: 0      // the last entry's hover fills to the box's edge, as the app's does at the other
-    readonly property real extra: expanded ? windows * (entryH + entryGap) + boxPad : 0
+    readonly property int shownEntries: windows - (draggedRow >= 0 ? 1 : 0)
+    readonly property int slots: shownEntries + (incomingSlot >= 0 ? 1 : 0)
+    readonly property real extra: expanded ? slots * entryStep + boxPad : 0
+    // where an entry, or the incoming slot, sits in the box
+    function slotY(pos) { return (growUp ? 0 : entryGap) + pos * entryStep; }
+    // the slot a scene point picks; over the app's own tile, the end
+    function slotAt(sx, sy) {
+        const p = box.mapFromItem(null, sx, sy);
+        if (!expanded || p.y < 0 || p.y >= box.height) return shownEntries;
+        return Math.max(0, Math.min(shownEntries, Math.floor((p.y - (growUp ? 0 : entryGap / 2)) / entryStep)));
+    }
+    function boxContains(sx, sy) {
+        const b = box.mapFromItem(null, sx, sy);
+        const t = task.mapFromItem(null, sx, sy);
+        return (box.visible && b.x >= 0 && b.y >= 0 && b.x < box.width && b.y < box.height)
+            || (t.x >= 0 && t.y >= 0 && t.x < task.width && t.y < task.height);
+    }
     // where the box sits in the rail's stack layer: the tile's top left
     property point boxOrigin: Qt.point(0, 0)
     function placeBox() {
@@ -90,7 +133,7 @@ Item {
     // grows down when the rail has room below, else up; shrinks the entries when it has neither
     function expand() {
         const rail = r.fullRepresentationItem;
-        const n = Math.max(1, windows);
+        const n = Math.max(1, slots);
         let h = r.tile;
         const p = rail ? task.mapToItem(rail, 0, 0) : Qt.point(0, 0);
         const below = rail ? rail.height - p.y - r.tile : Infinity;
@@ -174,21 +217,9 @@ Item {
         }
     }
 
-    // ---- drag to reorder, or onto a workspace thumbnail to move the app there
-    property int startIndex: 0
-    property bool dragAlive: false
-    // window ids of the tile at drag start, so a reorder on the way does not change what moves
-    property var dragWinIds: []
+    // ---- drag: onto another place in the column, a workspace thumbnail or the same app elsewhere
     readonly property bool canReorder: r.tasksModel.sortMode === TaskManager.TasksModel.SortManual
     readonly property bool canDrag: canReorder || running
-    readonly property real step: r.tile + view.spacing
-    // dx only triggers the drop target update: moving sideways off a thumbnail must clear it
-    readonly property real dx: dragH.active ? dragH.centroid.scenePosition.x - dragH.centroid.scenePressPosition.x : 0
-    readonly property real dy: dragH.active ? dragH.centroid.scenePosition.y - dragH.centroid.scenePressPosition.y : 0
-    readonly property int dir: view.verticalLayoutDirection === ListView.BottomToTop ? -1 : 1
-    onDxChanged: updateDrag()
-    onDyChanged: updateDrag()
-
     function winIdsAt(idx) {
         const ids = [];
         r.foreachChildTask(i => {
@@ -197,78 +228,12 @@ Item {
         }, idx);
         return ids;
     }
-    function rowHasDragWindow(row) {
-        const index = r.tasksModel.makeModelIndex(row);
-        const n = r.tasksModel.rowCount(index);
-        if (n > 0) {
-            for (let i = 0; i < n; ++i) {
-                const ids = r.tasksModel.data(r.tasksModel.makeModelIndex(row, i), TaskManager.AbstractTasksModel.WinIdList) || [];
-                if (ids.some(id => dragWinIds.indexOf(String(id)) >= 0)) return true;
-            }
-            return false;
-        }
-        const ids = r.tasksModel.data(index, TaskManager.AbstractTasksModel.WinIdList) || [];
-        return ids.some(id => dragWinIds.indexOf(String(id)) >= 0);
-    }
-    function dragRow() {
-        for (let i = 0; i < r.tasksModel.count; ++i) {
-            if (rowHasDragWindow(i)) return i;
-        }
-        return -1;
-    }
-    function restoreOrder() {
-        if (!canReorder || !r.tasksModel.count) return;
-        // launchers have no windows to look up by, but their index is still valid while dragging
-        const row = dragWinIds.length ? dragRow() : index;
-        const to = Math.max(0, Math.min(r.tasksModel.count - 1, startIndex));
-        if (row >= 0 && row !== to) r.tasksModel.move(row, to);
-    }
-    function updateDrag() {
-        if (!dragH.active) return;
-        const railItem = r.fullRepresentationItem;
-        if (!railItem) return;
-        const p = dragH.centroid.scenePosition;
-        // launchers have no windows to move, so they keep reordering even over a thumbnail.
-        // Hovering a thumbnail switches to it after a dwell; the app column stays on the
-        // desktop the drag started from, so the dragged tile does not vanish.
-        const desktop = railItem.workspaceAt(p.x, p.y);
-        if (running && desktop >= 0) {
-            railItem.dragDesktop = desktop;
-            // going for a workspace is not a reorder: put the tile back where it started
-            restoreOrder();
-            return;
-        }
-        railItem.dragDesktop = -1;
-        if (!canReorder) return;
-        const t = Math.max(0, Math.min(r.tasksModel.count - 1, Math.round(startIndex + dir * dy / step)));
-        if (t !== index) r.tasksModel.move(index, t);
-    }
-
-    function finishDrag(dropped) {
-        if (!dragAlive) return;
-        dragAlive = false;
-        const railItem = r.fullRepresentationItem;
-        const target = railItem ? railItem.dragDesktop : -1;
-        if (railItem) railItem.dragDesktop = -1;
-        if (dropped && target >= 0 && running) {
-            r.moveWindows(dragWinIds, r.virtualDesktopInfo.desktopIds[target], false);
-            restoreOrder();
-            r.endWindowDrag([], false);
-        } else {
-            r.tasksModel.syncLaunchers(); // move() alone does not touch the launcher list
-            // a drag that switched desktops and ended in the app column brings the app along, at
-            // the place it was dropped
-            r.endWindowDrag(running ? dragWinIds : [], dropped);
-        }
-    }
 
     Item {
         id: body
         width: parent.width; height: parent.height
-        y: dragH.active ? task.dy - task.dir * (task.index - task.startIndex) * task.step : 0
-        opacity: task.covered ? 0 : dragH.active ? 0.85 : 1
+        opacity: task.covered ? 0 : task.dragged ? 0.35 : 1
         Behavior on opacity { NumberAnimation { duration: 120 } }
-        Behavior on y { enabled: !dragH.active; NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
         // Running marks on the screen edge: one per window, up to four; the focused app's are longer.
         // While the box is open they gather into one beside the focused window's entry.
@@ -284,8 +249,7 @@ Item {
             readonly property real total: n * len + (n - 1) * gap
             readonly property bool merged: task.expanded && task.focusedRow >= 0
             readonly property real mergedLen: Math.min(28, task.entryH - 8)
-            readonly property real mergedCenter: (task.growUp ? -task.extra + task.boxPad : task.r.tile + task.entryGap)
-                                                 + task.focusedRow * (task.entryH + task.entryGap) + task.entryH / 2
+            readonly property real mergedCenter: (task.growUp ? -task.extra : task.r.tile) + task.slotY(task.focusedRow) + task.entryH / 2
             Repeater {
                 model: marks.n
                 Rectangle {
@@ -340,16 +304,38 @@ Item {
                 color: Kirigami.Theme.textColor
                 opacity: 0.14
             }
-            Column {
-                y: task.growUp ? task.boxPad : task.entryGap
-                spacing: task.entryGap
+            Item { // entries sit at their slots, making room where a dragged window would go
+                anchors.fill: parent
                 opacity: task.expanded ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: 120 } }
                 Repeater {
                     model: DelegateModel {
-                        model: task.canExpand && (task.expanded || task.reveal > 0) ? task.r.tasksModel : null
-                        rootIndex: task.canExpand ? task.r.tasksModel.makeModelIndex(task.index) : null
+                        model: task.isGroup && (task.expanded || task.reveal > 0) ? task.r.tasksModel : null
+                        rootIndex: task.isGroup ? task.r.tasksModel.makeModelIndex(task.index) : null
                         delegate: WindowEntry { owner: task }
+                    }
+                }
+                Repeater { // an app with one window, opened for a window of its kind
+                    model: !task.isGroup && task.running && (task.expanded || task.reveal > 0) ? 1 : 0
+                    delegate: WindowEntry { owner: task; single: true }
+                }
+                Item { // where the dragged window goes: its icon, faint
+                    visible: task.incomingSlot >= 0
+                    width: parent.width
+                    height: task.entryH
+                    y: task.slotY(Math.max(0, task.incomingSlot))
+                    Behavior on y { NumberAnimation { duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1] } }
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: task.r.tile * 0.26
+                        color: task.r.tileHover
+                    }
+                    Kirigami.Icon {
+                        anchors.centerIn: parent
+                        width: Math.min(Plasmoid.configuration.iconSize, task.entryH - 8); height: width
+                        roundToIconSize: false
+                        source: task.r.dragSpec ? task.r.dragSpec.icon : ""
+                        opacity: 0.45
                     }
                 }
             }
@@ -418,7 +404,7 @@ Item {
     PlasmaCore.ToolTipArea {
         id: tipArea
         anchors.fill: parent
-        active: !dragH.active && !task.r.menuOpen && !task.canExpand && (Plasmoid.configuration.showToolTips || task.isLauncher || !task.isGroup)
+        active: !task.r.dragSpec && !task.r.menuOpen && !task.canExpand && (Plasmoid.configuration.showToolTips || task.isLauncher || !task.isGroup)
         location: Plasmoid.location
         interactive: Plasmoid.configuration.showToolTips && !task.isLauncher
         mainItem: TaskToolTip {
@@ -435,30 +421,12 @@ Item {
         enabled: task.canDrag
         target: null
         acceptedButtons: Qt.LeftButton
-        xAxis.enabled: false
-        onActiveChanged: {
-            if (active) {
-                finishTimer.stop();
-                task.dragAlive = true;
-                task.r.beginWindowDrag();
-                task.startIndex = task.index;
-                task.dragWinIds = task.winIdsAt(task.modelIndex());
-                task.hideToolTip();
-                task.updateDrag();
-            } else {
-                // active drops before the grab is released or cancelled; both arrive right after
-                finishTimer.restart();
-            }
+        onActiveChanged: if (active) {
+            task.hideToolTip();
+            const ids = task.running ? task.winIdsAt(task.modelIndex()) : [];
+            task.r.startDrag({ kind: "app", winIds: ids, launcher: task.launcher }, task.model.decoration,
+                             task.isGroup ? task.model.AppName : (task.model.display || task.model.AppName), () => dragH.active);
         }
-        onGrabChanged: (transition, point) => {
-            if (transition === PointerDevice.UngrabExclusive) task.finishDrag(true);
-            else if (transition === PointerDevice.CancelGrabExclusive) task.finishDrag(false);
-        }
-    }
-    Timer { // a deactivation without a grab transition is no release, so it never moves windows
-        id: finishTimer
-        interval: 0
-        onTriggered: task.finishDrag(false)
     }
     MouseArea { // accepts the click, so Plasma's own panel menu stays closed
         anchors.fill: parent
@@ -499,11 +467,8 @@ Item {
         }
     }
 
-    // the tile can vanish mid-drag when its window closes or its desktop filters it out
     Component.onDestruction: {
         if (task.r.stackTask === task) task.r.stackTask = null;
-        if (!task.dragAlive) return;
-        if (task.r.fullRepresentationItem) task.r.fullRepresentationItem.dragDesktop = -1;
-        task.r.endWindowDrag([], false);
+        if (task.r.incomingTask === task) task.r.setIncoming(null, -1);
     }
 }
