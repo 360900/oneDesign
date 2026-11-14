@@ -1,6 +1,6 @@
 /*
     One window of a grouped app, in the app's expanded box. Hover shows its preview, click focuses
-    it, middle-click closes it, and dragging it onto a workspace thumbnail moves just this window.
+    it, right-click opens its menu, middle-click closes it, and dragging it onto a workspace thumbnail moves just this window.
 */
 import QtQuick
 import org.kde.plasma.plasmoid
@@ -16,12 +16,18 @@ Item {
     required property Item owner   // the app's tile
     readonly property var r: owner.r
     readonly property var winId: (model.WinIdList || [])[0]
-    readonly property var modelIndex: r.tasksModel.makeModelIndex(owner.index, index)
+    readonly property var idx: r.tasksModel.makeModelIndex(owner.index, index)
+    function modelIndex() { return idx; } // for the task menu
     readonly property bool active: model.IsActive === true
 
     property bool dragging: false
-    // keeps the box open while the pointer is here, on this window's preview, or dragging it
-    readonly property bool busy: hover.hovered || tip.hovered || dragging
+    property bool menuShown: false
+    Connections {
+        target: entry.r
+        function onMenuOpenChanged() { if (!entry.r.menuOpen) entry.menuShown = false; }
+    }
+    // keeps the box open while the pointer is here, on this window's preview, dragging it or in its menu
+    readonly property bool busy: hover.hovered || tip.hovered || dragging || menuShown
     property bool counted: false
     onBusyChanged: hold(busy)
     function hold(on) {
@@ -40,13 +46,13 @@ Item {
     function activate() {
         const tm = r.tasksModel;
         r.cancelHighlightWindows();
-        if (model.IsMinimized === true) { tm.requestToggleMinimized(modelIndex); tm.requestActivate(modelIndex); }
-        else if (active && Plasmoid.configuration.minimizeActiveTaskOnClick) tm.requestToggleMinimized(modelIndex);
-        else tm.requestActivate(modelIndex);
+        if (model.IsMinimized === true) { tm.requestToggleMinimized(idx); tm.requestActivate(idx); }
+        else if (active && Plasmoid.configuration.minimizeActiveTaskOnClick) tm.requestToggleMinimized(idx);
+        else tm.requestActivate(idx);
     }
 
     // concentric inside the box: its radius less the inset
-    readonly property int inset: 3
+    readonly property int inset: 2
     Rectangle {
         anchors.fill: parent
         anchors.margins: entry.inset
@@ -56,17 +62,9 @@ Item {
                : entry.active ? (entry.r.dark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.05)) : Qt.rgba(0, 0, 0, 0)
         Behavior on color { ColorAnimation { duration: 120 } }
     }
-    Rectangle { // the focused window: a short accent bar on the screen-edge side
-        visible: entry.active
-        width: 3; height: Math.round(entry.height * 0.4)
-        radius: 1.5
-        x: entry.r.side === PlasmaCore.Types.RightEdge ? entry.width - entry.inset - width - 2 : entry.inset + 2
-        anchors.verticalCenter: parent.verticalCenter
-        color: entry.r.accent
-    }
     Kirigami.Icon {
         anchors.centerIn: parent
-        width: Math.min(Math.round(Plasmoid.configuration.iconSize * 0.66), entry.height - 10)
+        width: Math.min(Plasmoid.configuration.iconSize, entry.height - 8)
         height: width
         roundToIconSize: false
         source: entry.model.decoration
@@ -104,11 +102,16 @@ Item {
     }
     TapHandler {
         acceptedButtons: Qt.MiddleButton
-        onTapped: entry.r.tasksModel.requestClose(entry.modelIndex)
+        onTapped: entry.r.tasksModel.requestClose(entry.idx)
     }
-    MouseArea { // accepts the click, so Plasma's own panel menu stays closed
+    MouseArea { // this window's menu; accepting the click keeps Plasma's own panel menu closed
         anchors.fill: parent
         acceptedButtons: Qt.RightButton
+        onClicked: {
+            tipArea.hideImmediately();
+            entry.menuShown = true;
+            entry.r.openTaskMenu(entry);
+        }
     }
 
     DragCard {

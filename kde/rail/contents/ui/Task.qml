@@ -54,13 +54,21 @@ Item {
     // apps next to it
     readonly property bool canExpand: isGroup && windows > 1
     property int holds: 0              // entries that keep the box open: hovered, previewed or dragged
-    readonly property bool wantExpand: canExpand && !dragH.active && !r.menuOpen && !r.editMode
-                                       && (hover.hovered || boxHover.hovered || holds > 0)
+    readonly property bool wantExpand: canExpand && !dragH.active && !r.editMode
+                                       && ((!r.menuOpen && (hover.hovered || boxHover.hovered)) || holds > 0)
     property bool expanded: false
     property bool growUp: false
-    property real entryH: Math.round(r.tile * 0.75)
+    // entries are tiles like the apps, with the column's spacing between them
+    property real entryH: r.tile
+    readonly property int entryGap: Math.max(6, Plasmoid.configuration.appSpacing)
     readonly property int boxPad: 4
-    readonly property real extra: expanded ? windows * entryH + boxPad : 0
+    readonly property real extra: expanded ? windows * (entryH + entryGap) + boxPad : 0
+    // where the box sits in the rail's stack layer: the tile's top left
+    property point boxOrigin: Qt.point(0, 0)
+    function placeBox() {
+        const layer = r.fullRepresentationItem ? r.fullRepresentationItem.stackLayer : null;
+        if (layer) boxOrigin = task.mapToItem(layer, 0, 0);
+    }
     property real reveal: extra
     Behavior on reveal { NumberAnimation { duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1] } }
     onWantExpandChanged: {
@@ -77,15 +85,16 @@ Item {
     function expand() {
         const rail = r.fullRepresentationItem;
         const n = Math.max(1, windows);
-        let h = Math.round(r.tile * 0.75);
+        let h = r.tile;
         const p = rail ? task.mapToItem(rail, 0, 0) : Qt.point(0, 0);
         const below = rail ? rail.height - p.y - r.tile : Infinity;
         const above = p.y;
-        const need = n * h + boxPad;
+        const need = n * (h + entryGap) + boxPad;
         growUp = below < need && above > below;
         const room = growUp ? above : below;
-        if (need > room) h = Math.max(20, Math.floor((room - boxPad) / n));
+        if (need > room) h = Math.max(20, Math.floor((room - boxPad) / n) - entryGap);
         entryH = h;
+        placeBox();
         tipArea.hideImmediately();
         expanded = true;
     }
@@ -105,7 +114,7 @@ Item {
         r.tasksModel.requestPublishDelegateGeometry(modelIndex(), Qt.rect(g.x, g.y, width, height), task);
     }
     Timer { id: publishTimer; interval: 200; onTriggered: task.publishGeometry() }
-    onYChanged: publishTimer.restart()
+    onYChanged: { publishTimer.restart(); if (reveal > 0) placeBox(); }
     onRunningChanged: { updateAudioStreams(); publishTimer.restart(); }
     Component.onCompleted: { publishTimer.restart(); updateAudioStreams(); }
 
@@ -292,21 +301,30 @@ Item {
             shadow.yOffset: 3
             shadow.color: Qt.rgba(0, 0, 0, (task.r.dark ? 0.4 : 0.2) * open)
         }
-        Item { // the windows, revealed as the box grows
+        Item { // the windows, revealed as the box grows; up in the rail's stack layer, see stackLayer
             id: box
-            anchors.horizontalCenter: parent.horizontalCenter
+            parent: task.r.fullRepresentationItem ? task.r.fullRepresentationItem.stackLayer : body
+            x: task.boxOrigin.x + (task.width - task.r.tile) / 2
+            y: task.boxOrigin.y + (task.growUp ? -task.reveal : task.r.tile)
             width: task.r.tile
-            y: task.growUp ? -task.reveal : task.r.tile
             height: task.reveal
             clip: true
-            visible: task.reveal > 0
+            visible: task.reveal > 0 && task.visible
             HoverHandler { id: boxHover; blocking: true }
             MouseArea { // clicks between the entries stay in the box
                 anchors.fill: parent
                 acceptedButtons: Qt.AllButtons
             }
+            Rectangle { // sets the windows apart from the app
+                x: 8; width: parent.width - 16
+                height: 1
+                y: task.growUp ? parent.height - Math.ceil(task.entryGap / 2) - 1 : Math.floor(task.entryGap / 2)
+                color: Kirigami.Theme.textColor
+                opacity: 0.14
+            }
             Column {
-                y: task.growUp ? task.boxPad : 0
+                y: task.growUp ? task.boxPad : task.entryGap
+                spacing: task.entryGap
                 opacity: task.expanded ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: 120 } }
                 Repeater {

@@ -158,9 +158,9 @@ PlasmoidItem {
         dragActiveWin = null;
     }
 
-    // Moves windows onto one desktop and keeps their focus: the one that had focus has it there too,
-    // the others land behind the window focused there, or take focus when nothing there has it.
-    // keepAll leaves windows that are on all desktops there.
+    // Moves windows onto one desktop and goes there, keeping their focus: the one that had focus has
+    // it there too, the others land behind the window last focused there, or take focus when nothing
+    // there had it. keepAll leaves windows that are on all desktops there.
     function moveWindows(winIds, deskId, keepAll) {
         if (deskId === undefined || deskId === null) return;
         const want = winIds.map(String);
@@ -175,16 +175,33 @@ PlasmoidItem {
             winModel.requestVirtualDesktops(index, [deskId]);
             moved.push({ id: id, index: index });
         }
+        if (!moved.length) {
+            if (String(deskId) !== String(vdi.currentDesktop)) switchTo(vdi.desktopIds.indexOf(deskId) + 1);
+            return;
+        }
         // KWin puts a window it moves first in that desktop's focus chain, so the order is set again
-        // by activating. Only on the current desktop: elsewhere, activating would switch to it.
-        if (!moved.length || String(deskId) !== String(vdi.currentDesktop)) return;
+        // by activating, which also goes to the desktop
         const focused = moved.find(w => w.id === String(dragActiveWin));
-        const active = winModel.activeTask;
-        const here = !focused && active && active.valid && want.indexOf(winIdOf(active)) < 0 ? active : null;
         const order = moved.filter(w => w !== focused).reverse().map(w => w.index);
         if (focused) order.push(focused.index);
-        else if (here) order.push(here);
+        else {
+            const last = lastFocusedOn(deskId, want);
+            if (last) order.push(last);
+        }
         order.forEach(index => winModel.requestActivate(index));
+    }
+    // the window used last on a desktop, leaving out some; winModel lists the most recent first
+    function lastFocusedOn(deskId, except) {
+        const R = TaskManager.AbstractTasksModel;
+        for (let i = 0; i < winModel.count; ++i) {
+            const index = winModel.makeModelIndex(i);
+            const id = winIdOf(index);
+            if (id === null || except.indexOf(id) >= 0) continue;
+            if (winModel.data(index, R.IsMinimized) === true || winModel.data(index, R.IsOnAllVirtualDesktops) === true) continue;
+            const vds = (winModel.data(index, R.VirtualDesktops) || []).map(String);
+            if (vds.indexOf(String(deskId)) >= 0) return index;
+        }
+        return null;
     }
     function cancelHighlightWindows() {
         if (Plasmoid.configuration.highlightWindows) windowsHovered([], false);
@@ -484,6 +501,15 @@ PlasmoidItem {
         readonly property real aspect: Screen.height > 0 ? Screen.height / Screen.width : 0.625
         readonly property real thumbW: Math.min(48, width - 14)
         readonly property real thumbH: Math.round(thumbW * aspect)
+
+        // an open app box takes its pointer events up here: the app column is a ListView, which
+        // keeps them from anything past its own edges
+        readonly property Item stackLayer: stackLayerItem
+        Item {
+            id: stackLayerItem
+            anchors.fill: parent
+            z: 100
+        }
 
         // the workspace thumbnail an app tile is being dragged onto, -1 for none
         property int dragDesktop: -1
