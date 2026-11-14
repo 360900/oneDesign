@@ -668,9 +668,30 @@ PlasmoidItem {
                     if (!mine) return;
                     if (transition === PointerDevice.UngrabExclusive) {
                         mine = false;
-                        rail.dragReleased(point.scenePosition.x, point.scenePosition.y);
+                        // Qt also lets go when another app takes focus, as on a switch from an empty
+                        // desktop: the button is still down, so railPoint carries on to the release
+                        if (point.state !== EventPoint.Released && railPoint.active) railPoint.carrying = true;
+                        else rail.dragReleased(point.scenePosition.x, point.scenePosition.y);
                     } else if (transition === PointerDevice.CancelGrabExclusive) {
                         mine = false;
+                        root.finishDrag(false);
+                    }
+                }
+            }
+            // follows every press without taking it, so it still has the pointer when railDrag lets go early
+            PointHandler {
+                id: railPoint
+                acceptedButtons: Qt.LeftButton
+                enabled: !root.editMode
+                property bool carrying: false
+                onPointChanged: if (carrying) rail.dragMoved(point.scenePosition.x, point.scenePosition.y)
+                onGrabChanged: (transition, point) => {
+                    if (!carrying) return;
+                    if (transition === PointerDevice.UngrabPassive && point.state === EventPoint.Released) {
+                        carrying = false;
+                        rail.dragReleased(point.scenePosition.x, point.scenePosition.y);
+                    } else if (transition === PointerDevice.UngrabPassive || transition === PointerDevice.CancelGrabPassive) {
+                        carrying = false;
                         root.finishDrag(false);
                     }
                 }
@@ -773,6 +794,7 @@ PlasmoidItem {
                     // KWin's move takes the release, so the handler would hold the pointer until the next
                     // click, with no hover on the rail meanwhile: disabling its item lets go now
                     railDrag.mine = false;
+                    railPoint.carrying = false;
                     dragLayer.enabled = false;
                     Qt.callLater(() => dragLayer.enabled = true);
                     return;
