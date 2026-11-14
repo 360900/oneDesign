@@ -37,6 +37,9 @@ PlasmoidItem {
     readonly property bool windowViewAvailable: windowViewWatcher.registered
     property Item toolTipOpenedByClick: null
     property bool menuOpen: false
+    // the desktop an app tile drag started on: the app column stays on it while the drag
+    // switches desktops, so the dragged tile keeps its place. null when no drag runs.
+    property var dragFromDesktop: null
 
     TaskManager.VirtualDesktopInfo { id: vdi }
     TaskManager.ActivityInfo { id: activityInfo }
@@ -64,7 +67,7 @@ PlasmoidItem {
     TaskManager.TasksModel {
         id: appModel
         readonly property bool manual: sortMode === TaskManager.TasksModel.SortManual
-        virtualDesktop: vdi.currentDesktop
+        virtualDesktop: root.dragFromDesktop ?? vdi.currentDesktop
         activity: activityInfo.currentActivity
         screenGeometry: Plasmoid.containment.screenGeometry
         filterByVirtualDesktop: Plasmoid.configuration.showOnlyCurrentDesktop
@@ -628,7 +631,7 @@ PlasmoidItem {
                             acceptedButtons: Qt.RightButton
                             onClicked: root.openWorkspaceMenu(ws)
                         }
-                        // hovering with a file or anything else held switches without ending the drag
+                        // hovering with a file, an app tile or anything else held switches without ending the drag
                         DropArea {
                             id: dragHover
                             anchors.fill: parent
@@ -636,7 +639,7 @@ PlasmoidItem {
                         }
                         Timer {
                             interval: 350
-                            running: dragHover.containsDrag && !ws.current
+                            running: (dragHover.containsDrag || rail.dragDesktop === ws.index) && !ws.current
                             onTriggered: root.switchTo(ws.index + 1)
                         }
                     }

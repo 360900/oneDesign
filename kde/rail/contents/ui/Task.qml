@@ -175,8 +175,8 @@ Item {
         if (!railItem) return;
         const p = dragH.centroid.scenePosition;
         // launchers have no windows to move, so they keep reordering even over a thumbnail.
-        // Hovering a thumbnail does not switch to it: with "show only current desktop" the
-        // dragged tile would vanish.
+        // Hovering a thumbnail switches to it after a dwell; the app column stays on the
+        // desktop the drag started from, so the dragged tile does not vanish.
         const desktop = railItem.workspaceAt(p.x, p.y);
         if (running && desktop >= 0) {
             railItem.dragDesktop = desktop;
@@ -202,6 +202,7 @@ Item {
         } else {
             r.tasksModel.syncLaunchers(); // move() alone does not touch the launcher list
         }
+        r.dragFromDesktop = null;
     }
 
     Item {
@@ -329,6 +330,7 @@ Item {
             if (active) {
                 finishTimer.stop();
                 task.dragAlive = true;
+                task.r.dragFromDesktop = task.r.virtualDesktopInfo.currentDesktop;
                 task.startIndex = task.index;
                 task.dragWinIds = task.winIdsAt(task.modelIndex());
                 task.hideToolTip();
@@ -389,6 +391,8 @@ Item {
 
     // the tile can vanish mid-drag when its window closes or its desktop filters it out
     Component.onDestruction: {
-        if (task.dragAlive && task.r.fullRepresentationItem) task.r.fullRepresentationItem.dragDesktop = -1;
+        if (!task.dragAlive) return;
+        if (task.r.fullRepresentationItem) task.r.fullRepresentationItem.dragDesktop = -1;
+        task.r.dragFromDesktop = null;
     }
 }
