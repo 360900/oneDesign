@@ -23,6 +23,12 @@ Item {
     required property Item task
     property bool active: false        // the pointer is on the app tile, or the tooltip was opened by a click
     property bool dragging: false      // a window preview is being dragged out
+    // one window of a group only, for its entry in the app's expanded box: its row and model data
+    property int child: -1
+    property var childModel: null
+    property var hideFn: null          // closes the tooltip this sits in, when not the app tile's
+    readonly property bool hovered: tipHover.hovered || dragging
+    function hide() { if (hideFn) hideFn(); else task.hideToolTip(); }
     // Thumbnails stream while the tooltip is in use: the pointer on the tile, on the tooltip itself or
     // dragging out of it. A short hold covers the gap between tile and tooltip, so no placeholder flashes.
     readonly property bool wanted: active || dragging || tipHover.hovered
@@ -48,7 +54,7 @@ Item {
 
         // launcher, or a running app with the tooltip previews switched off
         RowLayout {
-            visible: tip.isLauncher || !tip.thumbs
+            visible: (tip.isLauncher || !tip.thumbs) && tip.child < 0
             spacing: Kirigami.Units.smallSpacing * 2
             Layout.margins: Kirigami.Units.smallSpacing
             Layout.maximumWidth: Kirigami.Units.gridUnit * 18
@@ -75,7 +81,7 @@ Item {
         // one entry per window: the group's children, or the task itself
         Repeater {
             model: DelegateModel {
-                model: (tip.thumbs && tip.isGroup && tip.task) ? tip.r.tasksModel : null
+                model: (tip.thumbs && tip.isGroup && tip.child < 0 && tip.task) ? tip.r.tasksModel : null
                 rootIndex: tip.isGroup && tip.task ? tip.r.tasksModel.makeModelIndex(tip.task.index) : null
                 delegate: Window {}
             }
@@ -85,10 +91,15 @@ Item {
             visible: active
             sourceComponent: Window { index: 0; model: tip.m }
         }
+        Loader {
+            active: tip.child >= 0 && tip.childModel !== null
+            visible: active
+            sourceComponent: Window { index: tip.child; model: tip.childModel }
+        }
 
         // media controls
         RowLayout {
-            visible: tip.player !== null && tip.player.canControl === true && !tip.isLauncher
+            visible: tip.player !== null && tip.player.canControl === true && !tip.isLauncher && tip.child < 0
             Layout.fillWidth: true
             spacing: 0
             ColumnLayout {
@@ -118,7 +129,7 @@ Item {
 
         // volume of the app's streams
         RowLayout {
-            visible: Plasmoid.configuration.tooltipControls && tip.task && tip.task.hasAudioStream === true && !tip.isLauncher
+            visible: Plasmoid.configuration.tooltipControls && tip.task && tip.task.hasAudioStream === true && !tip.isLauncher && tip.child < 0
             Layout.fillWidth: true
             PlasmaComponents3.ToolButton {
                 icon.name: tip.task && tip.task.muted ? "audio-volume-muted" : "audio-volume-high"
@@ -145,7 +156,7 @@ Item {
         readonly property real thumbW: Kirigami.Units.gridUnit * 14
         spacing: Kirigami.Units.smallSpacing
         // the entry can go away mid-drag when its window closes
-        Component.onDestruction: if (winDrag.active) { tip.dragging = false; tip.r.dragFromDesktop = null; }
+        Component.onDestruction: if (tip.dragging) { tip.dragging = false; tip.r.endWindowDrag([], false); }
         Layout.margins: Kirigami.Units.smallSpacing
 
         RowLayout {
@@ -168,6 +179,7 @@ Item {
         }
         Item {
             id: frame
+            visible: tip.thumbs
             Layout.preferredWidth: win.thumbW
             Layout.preferredHeight: Math.round(win.thumbW * 9 / 16)
             Rectangle { // placeholder until the first frame arrives
@@ -199,35 +211,37 @@ Item {
                 id: winHover
                 onHoveredChanged: {
                     tip.r.windowsHovered(win.model.WinIdList, hovered);
-                    // the drag image has to be ready before a drag starts
-                    if (hovered && win.winId !== undefined)
-                        frame.grabToImage(result => { frame.Drag.imageSource = result.url; }, Qt.size(win.thumbW / 2, Math.round(win.thumbW * 9 / 32)));
+                    if (hovered) card.refresh(); // the drag image has to be ready before a drag starts
                 }
             }
-            // drag the preview onto a workspace thumbnail to move just this window there
+            DragCard {
+                id: card
+                x: -10000 // out of view, only grabbed
+                icon: win.model.decoration
+                title: win.model.display || ""
+            }
+            // drag the preview onto a workspace thumbnail to move just this window there, or over one
+            // to switch and then anywhere to bring the window along
             Drag.dragType: Drag.Automatic
             Drag.supportedActions: Qt.MoveAction
             Drag.mimeData: ({ [tip.r.windowMime]: String(win.winId) })
+            Drag.imageSource: card.image
+            Drag.hotSpot: Qt.point(card.pad + 24, card.pad + 22)
             Drag.active: winDrag.active
+            Drag.onDragFinished: dropAction => {
+                tip.dragging = false;
+                // a thumbnail takes the drop itself; anywhere else counts as a drop on this desktop
+                tip.r.endWindowDrag([String(win.winId)], dropAction === Qt.IgnoreAction);
+            }
             DragHandler {
                 id: winDrag
                 target: null
                 enabled: win.winId !== undefined
-                onActiveChanged: {
-                    tip.dragging = active;
-                    if (active) {
-                        tip.r.cancelHighlightWindows();
-                        // the app column stays on this desktop while the drag switches desktops,
-                        // so the tooltip the drag started in is not taken away
-                        tip.r.dragFromDesktop = tip.r.virtualDesktopInfo.currentDesktop;
-                    } else {
-                        tip.r.dragFromDesktop = null;
-                    }
-                }
+                onActiveChanged: if (active && !tip.dragging) { tip.dragging = true; tip.r.beginWindowDrag(); }
             }
             TapHandler {
                 acceptedButtons: Qt.LeftButton
-                onTapped: { tip.r.cancelHighlightWindows(); tip.r.tasksModel.requestActivate(win.modelIndex); tip.task.hideToolTip(); }
+                onTapped: { tip.r.cancelHighlightWindows(); tip.r.tasksModel.requestActivate(win.modelIndex); tip.hide(); }
             }
             TapHandler {
                 acceptedButtons: Qt.MiddleButton

@@ -3,6 +3,7 @@
     (plasma-desktop applets/taskmanager/qml/Task.qml, code/TaskTools.js).
 */
 import QtQuick
+import QtQml.Models
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
@@ -47,7 +48,51 @@ Item {
     width: ListView.view ? ListView.view.width : 0
     height: shown ? r.tile : 0
     visible: shown
-    z: dragH.active ? 10 : 0
+    z: dragH.active ? 10 : reveal > 0 ? 5 : 0
+
+    // ---- grouped apps: on hover the tile grows into a box with one entry per window, over the
+    // apps next to it
+    readonly property bool canExpand: isGroup && windows > 1
+    property int holds: 0              // entries that keep the box open: hovered, previewed or dragged
+    readonly property bool wantExpand: canExpand && !dragH.active && !r.menuOpen && !r.editMode
+                                       && (hover.hovered || boxHover.hovered || holds > 0)
+    property bool expanded: false
+    property bool growUp: false
+    property real entryH: Math.round(r.tile * 0.75)
+    readonly property int boxPad: 4
+    readonly property real extra: expanded ? windows * entryH + boxPad : 0
+    property real reveal: extra
+    Behavior on reveal { NumberAnimation { duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1] } }
+    onWantExpandChanged: {
+        if (wantExpand) { collapseTimer.stop(); if (!expanded) openTimer.restart(); }
+        else { openTimer.stop(); if (expanded) collapseTimer.restart(); }
+    }
+    Timer { id: openTimer; interval: 150; onTriggered: task.expand() }
+    Timer { id: collapseTimer; interval: 300; onTriggered: task.expanded = false }
+    onExpandedChanged: {
+        if (expanded) r.stackTask = task;
+        else if (r.stackTask === task) r.stackTask = null;
+    }
+    // grows down when the rail has room below, else up; shrinks the entries when it has neither
+    function expand() {
+        const rail = r.fullRepresentationItem;
+        const n = Math.max(1, windows);
+        let h = Math.round(r.tile * 0.75);
+        const p = rail ? task.mapToItem(rail, 0, 0) : Qt.point(0, 0);
+        const below = rail ? rail.height - p.y - r.tile : Infinity;
+        const above = p.y;
+        const need = n * h + boxPad;
+        growUp = below < need && above > below;
+        const room = growUp ? above : below;
+        if (need > room) h = Math.max(20, Math.floor((room - boxPad) / n));
+        entryH = h;
+        tipArea.hideImmediately();
+        expanded = true;
+    }
+    // an open box of another app covers this one
+    readonly property bool covered: r.stackTask !== null && r.stackTask !== task
+                                    && y < r.stackBottom && y + height > r.stackTop
+    enabled: !covered
 
     function modelIndex() { return r.tasksModel.makeModelIndex(index); }
     function showToolTip() { tipArea.showToolTip(); }
@@ -71,7 +116,9 @@ Item {
         if ((modifiers & Qt.ShiftModifier) || isLauncher) { tm.requestNewInstance(idx); return; }
         if (isStartup) return;
         if (isGroup) {
-            switch (Plasmoid.configuration.groupedTaskVisualization) {
+            // the expanded box already shows the windows, so "small window previews" cycles instead
+            const mode = Plasmoid.configuration.groupedTaskVisualization;
+            switch (mode === 1 && canExpand ? 0 : mode) {
             case 1: // small window previews
                 if (r.toolTipOpenedByClick === task) { hideToolTip(); r.toolTipOpenedByClick = null; }
                 else { r.toolTipOpenedByClick = task; showToolTip(); }
@@ -161,17 +208,6 @@ Item {
         const to = Math.max(0, Math.min(r.tasksModel.count - 1, startIndex));
         if (row >= 0 && row !== to) r.tasksModel.move(row, to);
     }
-    // keepAll leaves windows that are on all desktops there
-    function moveDragToDesktop(deskId, keepAll) {
-        if (deskId === undefined || deskId === null) return;
-        for (let i = 0; i < r.tasksModel.count; ++i) {
-            if (!rowHasDragWindow(i)) continue;
-            const index = r.tasksModel.makeModelIndex(i);
-            if (keepAll && r.tasksModel.data(index, TaskManager.AbstractTasksModel.IsOnAllVirtualDesktops) === true) continue;
-            r.tasksModel.requestVirtualDesktops(index, [deskId]);
-        }
-    }
-
     function updateDrag() {
         if (!dragH.active) return;
         const railItem = r.fullRepresentationItem;
@@ -199,26 +235,24 @@ Item {
         const railItem = r.fullRepresentationItem;
         const target = railItem ? railItem.dragDesktop : -1;
         if (railItem) railItem.dragDesktop = -1;
-        const here = r.virtualDesktopInfo.currentDesktop;
         if (dropped && target >= 0 && running) {
-            moveDragToDesktop(r.virtualDesktopInfo.desktopIds[target], false);
+            r.moveWindows(dragWinIds, r.virtualDesktopInfo.desktopIds[target], false);
             restoreOrder();
-        } else if (dropped && running && r.dragFromDesktop !== null && String(here) !== String(r.dragFromDesktop)) {
-            // the drag switched desktops and ended in the app column: the app comes along to this
-            // desktop, at the place it was dropped
-            moveDragToDesktop(here, true);
-            r.tasksModel.syncLaunchers();
+            r.endWindowDrag([], false);
         } else {
             r.tasksModel.syncLaunchers(); // move() alone does not touch the launcher list
+            // a drag that switched desktops and ended in the app column brings the app along, at
+            // the place it was dropped
+            r.endWindowDrag(running ? dragWinIds : [], dropped);
         }
-        r.dragFromDesktop = null;
     }
 
     Item {
         id: body
         width: parent.width; height: parent.height
         y: dragH.active ? task.dy - task.dir * (task.index - task.startIndex) * task.step : 0
-        opacity: dragH.active ? 0.85 : 1
+        opacity: task.covered ? 0 : dragH.active ? 0.85 : 1
+        Behavior on opacity { NumberAnimation { duration: 120 } }
         Behavior on y { enabled: !dragH.active; NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
         // Running marks on the screen edge: one per window, up to four; the focused app's are longer
@@ -243,13 +277,46 @@ Item {
                 }
             }
         }
-        Rectangle { // resting tile: shows behind icons that are not full-bleed
+        Kirigami.ShadowedRectangle { // resting tile: shows behind icons that are not full-bleed, and grows into the box
+            readonly property real open: task.extra > 0 ? Math.min(1, task.reveal / task.extra) : Math.min(1, task.reveal / 20)
             anchors.horizontalCenter: parent.horizontalCenter
-            width: task.r.tile; height: task.r.tile
+            width: task.r.tile
+            y: task.growUp ? -task.reveal : 0
+            height: task.r.tile + task.reveal
             radius: task.r.tile * 0.26
-            color: task.r.fill
+            // open, it floats over the apps beside it: an opaque surface with a soft shadow
+            color: Qt.tint(task.r.fill, Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.94 * open))
             border.width: 1
             border.color: Qt.rgba(1, 1, 1, task.r.dark ? 0.12 : 0.6)
+            shadow.size: 16 * open
+            shadow.yOffset: 3
+            shadow.color: Qt.rgba(0, 0, 0, (task.r.dark ? 0.4 : 0.2) * open)
+        }
+        Item { // the windows, revealed as the box grows
+            id: box
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: task.r.tile
+            y: task.growUp ? -task.reveal : task.r.tile
+            height: task.reveal
+            clip: true
+            visible: task.reveal > 0
+            HoverHandler { id: boxHover; blocking: true }
+            MouseArea { // clicks between the entries stay in the box
+                anchors.fill: parent
+                acceptedButtons: Qt.AllButtons
+            }
+            Column {
+                y: task.growUp ? task.boxPad : 0
+                opacity: task.expanded ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: 120 } }
+                Repeater {
+                    model: DelegateModel {
+                        model: task.canExpand && (task.expanded || task.reveal > 0) ? task.r.tasksModel : null
+                        rootIndex: task.canExpand ? task.r.tasksModel.makeModelIndex(task.index) : null
+                        delegate: WindowEntry { owner: task }
+                    }
+                }
+            }
         }
         Kirigami.Icon {
             id: icon
@@ -271,7 +338,7 @@ Item {
             radius: task.r.tile * 0.26
             color: tap.pressed ? Qt.rgba(task.r.accent.r, task.r.accent.g, task.r.accent.b, 0.25)
                    : hover.hovered ? (task.r.dark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
-                   : task.active ? (task.r.dark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.05)) : Qt.rgba(0, 0, 0, 0)
+                   : task.active && !task.expanded ? (task.r.dark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.05)) : Qt.rgba(0, 0, 0, 0)
             Behavior on color { ColorAnimation { duration: 100 } }
         }
         Rectangle { // asks for attention
@@ -317,7 +384,7 @@ Item {
     PlasmaCore.ToolTipArea {
         id: tipArea
         anchors.fill: parent
-        active: !dragH.active && !task.r.menuOpen && (Plasmoid.configuration.showToolTips || task.isLauncher || !task.isGroup)
+        active: !dragH.active && !task.r.menuOpen && !task.canExpand && (Plasmoid.configuration.showToolTips || task.isLauncher || !task.isGroup)
         location: Plasmoid.location
         interactive: Plasmoid.configuration.showToolTips && !task.isLauncher
         mainItem: TaskToolTip {
@@ -339,7 +406,7 @@ Item {
             if (active) {
                 finishTimer.stop();
                 task.dragAlive = true;
-                task.r.dragFromDesktop = task.r.virtualDesktopInfo.currentDesktop;
+                task.r.beginWindowDrag();
                 task.startIndex = task.index;
                 task.dragWinIds = task.winIdsAt(task.modelIndex());
                 task.hideToolTip();
@@ -400,8 +467,9 @@ Item {
 
     // the tile can vanish mid-drag when its window closes or its desktop filters it out
     Component.onDestruction: {
+        if (task.r.stackTask === task) task.r.stackTask = null;
         if (!task.dragAlive) return;
         if (task.r.fullRepresentationItem) task.r.fullRepresentationItem.dragDesktop = -1;
-        task.r.dragFromDesktop = null;
+        task.r.endWindowDrag([], false);
     }
 }

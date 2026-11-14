@@ -40,6 +40,11 @@ PlasmoidItem {
     // the desktop an app tile drag started on: the app column stays on it while the drag
     // switches desktops, so the dragged tile keeps its place. null when no drag runs.
     property var dragFromDesktop: null
+    // the grouped app whose box is open over the apps around it, and the span it covers in the
+    // app column; the apps under it step aside
+    property Item stackTask: null
+    readonly property real stackTop: stackTask ? stackTask.y - (stackTask.growUp ? stackTask.reveal : 0) : 0
+    readonly property real stackBottom: stackTask ? stackTask.y + stackTask.height + (stackTask.growUp ? 0 : stackTask.reveal) : 0
 
     TaskManager.VirtualDesktopInfo { id: vdi }
     TaskManager.ActivityInfo { id: activityInfo }
@@ -124,17 +129,60 @@ PlasmoidItem {
             iface: "org.kde.KWin.HighlightWindow", member: "highlightWindows",
             arguments: [hovered ? winIds.map(String) : []], signature: "(as)" });
     }
-    // a single window, by id, onto one desktop: window previews dragged onto a thumbnail
+    // ---- moving windows between desktops by drag: app tiles, window entries and window previews
     readonly property string windowMime: "application/x-onedesign-window"
-    function moveWindowToDesktop(winId, deskId) {
-        for (let i = 0; i < winModel.count; ++i) {
+    property var dragActiveWin: null // the window that had focus when the drag started
+
+    function winIdOf(index) {
+        const ids = winModel.data(index, TaskManager.AbstractTasksModel.WinIdList) || [];
+        return ids.length ? String(ids[0]) : null;
+    }
+    function activeWinId() {
+        const a = winModel.activeTask;
+        return a && a.valid ? winIdOf(a) : null;
+    }
+    function beginWindowDrag() {
+        cancelHighlightWindows();
+        dragActiveWin = activeWinId();
+        // the app column stays on this desktop while the drag switches desktops, so what is being
+        // dragged keeps its place
+        dragFromDesktop = vdi.currentDesktop;
+    }
+    // where a drag that ended anywhere but a thumbnail takes its windows: along to the desktop it switched to
+    function endWindowDrag(winIds, dropped) {
+        if (dropped && dragFromDesktop !== null && String(vdi.currentDesktop) !== String(dragFromDesktop))
+            moveWindows(winIds, vdi.currentDesktop, true);
+        dragFromDesktop = null;
+        dragActiveWin = null;
+    }
+
+    // Moves windows onto one desktop and keeps their focus: the one that had focus has it there too,
+    // the others land behind the window focused there, or take focus when nothing there has it.
+    // keepAll leaves windows that are on all desktops there.
+    function moveWindows(winIds, deskId, keepAll) {
+        if (deskId === undefined || deskId === null) return;
+        const want = winIds.map(String);
+        const moved = [];
+        for (let i = 0; i < winModel.count; ++i) { // least recently used last, as winModel sorts
             const index = winModel.makeModelIndex(i);
-            const ids = winModel.data(index, TaskManager.AbstractTasksModel.WinIdList) || [];
-            if (ids.some(id => String(id) === String(winId))) {
-                winModel.requestVirtualDesktops(index, [deskId]);
-                return;
-            }
+            const id = winIdOf(index);
+            if (id === null || want.indexOf(id) < 0) continue;
+            if (keepAll && winModel.data(index, TaskManager.AbstractTasksModel.IsOnAllVirtualDesktops) === true) continue;
+            const vds = winModel.data(index, TaskManager.AbstractTasksModel.VirtualDesktops) || [];
+            if (vds.length === 1 && String(vds[0]) === String(deskId)) continue; // already there
+            winModel.requestVirtualDesktops(index, [deskId]);
+            moved.push({ id: id, index: index });
         }
+        // KWin puts a window it moves first in that desktop's focus chain, so the order is set again
+        // by activating. Only on the current desktop: elsewhere, activating would switch to it.
+        if (!moved.length || String(deskId) !== String(vdi.currentDesktop)) return;
+        const focused = moved.find(w => w.id === String(dragActiveWin));
+        const active = winModel.activeTask;
+        const here = !focused && active && active.valid && want.indexOf(winIdOf(active)) < 0 ? active : null;
+        const order = moved.filter(w => w !== focused).reverse().map(w => w.index);
+        if (focused) order.push(focused.index);
+        else if (here) order.push(here);
+        order.forEach(index => winModel.requestActivate(index));
     }
     function cancelHighlightWindows() {
         if (Plasmoid.configuration.highlightWindows) windowsHovered([], false);
@@ -656,7 +704,7 @@ PlasmoidItem {
                                 const moving = holdsWindow;
                                 holdsWindow = false;
                                 if (!moving) return;
-                                root.moveWindowToDesktop(drop.getDataAsString(root.windowMime), ws.deskId);
+                                root.moveWindows([drop.getDataAsString(root.windowMime)], ws.deskId, false);
                                 drop.accept(Qt.MoveAction);
                             }
                         }
