@@ -107,11 +107,17 @@
 
 
   /* ---------------- edge-docked shells ---------------- */
-  const appList = [["files", "folder", "Files", 1], ["web", "computer", "Web", 1], ["mail", "mail", "Mail"], ["music", "volume", "Music"], ["photos", "image", "Photos"], ["text", "file", "Text Editor", 1], ["term", null, "Terminal"], ["settings", "settings", "Settings"]];
+  const appList = [["files", "folder", "Files", 3], ["web", "computer", "Web", 1], ["mail", "mail", "Mail"], ["music", "volume", "Music"], ["photos", "image", "Photos"], ["text", "file", "Text Editor", 2], ["term", null, "Terminal"], ["settings", "settings", "Settings"]];
   const aic = ([k, ic], cls = "") => `<div class="appicon ${k} ${cls}">${ic ? I(ic) : `<span class="glyph">&gt;_</span>`}</div>`;
 
   function railShell() {
-    const apps = appList.map((a, i) => aic(a, a[3] ? (i === 0 ? "run cur" : "run") : "")).join("");
+    // an app tile; running apps have one edge mark per window
+    const rtile = (a, cur) => {
+      const n = Math.min(4, a[3] || 0);
+      const marks = n ? `<span class="marks ${n > 1 ? "many" : ""}">${"<i></i>".repeat(n)}</span>` : "";
+      return `<div class="rtile ${cur ? "cur" : ""}" title="${a[2]}">${marks}${aic(a)}</div>`;
+    };
+    const apps = appList.map((a, i) => rtile(a, i === 0)).join("");
     return `<nav class="rail mat-glass" data-role="shell">
       <div class="rbtn">${I("grid")}</div>
       <div class="wsl">
@@ -123,7 +129,7 @@
       <div class="sep"></div>
       ${apps}
       <div class="sep"></div>
-      ${aic(["store", "add"])}
+      ${rtile(["store", "add", "Store"])}
       <div class="spacer"></div>
       <div class="tray">${I("wifi")}${I("volume")}${I("battery")}</div>
       <div class="clock">15<br>42<small>31 Oct</small></div>

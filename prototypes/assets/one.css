@@ -290,9 +290,19 @@ body:not([data-ready]) { visibility: hidden; }
 /* ---------- edge-docked shells (rail, rail-open, edge) ---------- */
 .rail { position: absolute; left: 0; top: 0; bottom: 0; width: 68px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 0; border-radius: 0 calc(var(--r-container) + 10px) calc(var(--r-container) + 10px) 0; z-index: 50; box-shadow: var(--shadow-float), 1px 0 0 rgb(0 0 0 / var(--g-edge)); }
 .rail::before, .rail::after { border-radius: inherit; }
-.rail .appicon { width: 40px; height: 40px; border-radius: 12px; }
-.rail .run::before { content: ""; position: absolute; left: -14px; top: 50%; height: 16px; width: 4px; margin-top: -8px; border-radius: 0 4px 4px 0; background: var(--c-accent); }
-.rail .run.cur::before { height: 28px; margin-top: -14px; }
+/* app tiles (rail.tile): glass at rest, the canvas surface when focused, hover and press tint the whole tile */
+.rail .rtile { width: 44px; height: 44px; border-radius: 11.5px; display: grid; place-items: center; position: relative; flex: none; background: var(--rt-rest); transition: background var(--t-normal) var(--ease); }
+.rail .rtile.cur { background: var(--rt-lifted); }
+.rail .rtile::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: transparent; transition: background var(--t-fast) var(--ease); }
+.rail .rtile:hover::after { background: var(--rt-hover); }
+.rail .rtile:active::after { background: var(--rt-pressed); }
+.rail .rtile .appicon { width: 32px; height: 32px; border-radius: 9px; }
+/* edge marks, one per window up to four; the focused app's are longer */
+.rail .marks { position: absolute; left: -12px; top: 0; bottom: 0; width: 3.5px; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+.rail .marks i { width: 3.5px; height: 14px; border-radius: 2px; background: var(--c-accent); }
+.rail .marks.many i { height: 5px; }
+.rail .cur .marks i { height: 28px; }
+.rail .cur .marks.many i { height: 8px; }
 .rail .sep { width: 28px; height: 1px; background: var(--c-stroke-strong); margin: 4px 0; flex: none; }
 .rail .wsl { display: flex; flex-direction: column; gap: 8px; align-items: center; flex: none; }
 /* thumbnail: the wallpaper at 16:10 with miniature windows, number tag, accent ring when current */

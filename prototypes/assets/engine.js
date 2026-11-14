@@ -82,6 +82,12 @@
     v["--g-accent"] = Math.round(g.accentMix[mode] * 100) + "%";
     v["--g-rim"] = g.rim + "px";
     v["--g-noise"] = noise(g.noise);
+    // rail app tiles: glass at rest, the canvas surface when focused, a tint for hover and press
+    const rt = t.rail.tile;
+    v["--rt-rest"] = `rgb(255 255 255 / ${rt.rest[mode]})`;
+    v["--rt-lifted"] = `color-mix(in srgb, var(--c-${rt.lifted}) ${Math.round(rt.liftedAlpha * 100)}%, rgb(255 255 255 / ${rt.rest[mode]}))`;
+    v["--rt-hover"] = `rgb(${ink} / ${rt.hover[mode]})`;
+    v["--rt-pressed"] = `color-mix(in srgb, var(--c-accent) ${Math.round(rt.pressed * 100)}%, transparent)`;
     v["--v-fill"] = dark ? 0.1 : 0.5;
     v["--v-fill-strong"] = dark ? 0.18 : 0.72;
     v["--v-hover"] = dark ? 0.07 : 0.35;
