@@ -51,7 +51,7 @@ Item {
     z: reveal > 0 ? 5 : 0
     readonly property string launcher: String(model.LauncherUrlWithoutIcon || "")
 
-    // ---- dragged: the app itself, or one of its windows (see root.startDrag)
+    // ---- dragged: the app itself, or one of its windows (see root.beginDrag)
     property bool holdsDragged: false  // holds a dragged window, or is the dragged launcher
     property int draggedRow: -1        // the entry of a dragged window
     function updateDragged() {
@@ -144,8 +144,43 @@ Item {
         if (need > room) h = Math.max(20, Math.floor((room - boxPad) / n) - entryGap);
         entryH = h;
         placeBox();
-        tipArea.hideImmediately();
         expanded = true;
+        // opened by hover: the focused window's preview comes with it, on the same delay
+        if (!receiving && hover.hovered) { updatePreview(); Qt.callLater(showToolTip); }
+    }
+    // the window the app's own tile previews while its box is open: the focused one, else the one used last
+    property int previewRow: -1
+    property var previewData: null
+    function updatePreview() {
+        const tm = r.tasksModel;
+        const R = TaskManager.AbstractTasksModel;
+        const kids = [...Array(tm.rowCount(modelIndex())).keys()].map(c => tm.makeModelIndex(index, c));
+        if (!kids.length) { previewRow = -1; previewData = null; return; }
+        let k = kids.findIndex(i => tm.data(i, R.IsActive) === true);
+        if (k < 0) {
+            const top = r.groupTopTask(kids, R.LastActivated);
+            k = top !== undefined ? top.row : 0;
+        }
+        const i = kids[k];
+        previewData = { decoration: tm.data(i, Qt.DecorationRole), display: tm.data(i, Qt.DisplayRole),
+                        WinIdList: tm.data(i, R.WinIdList), IsActive: tm.data(i, R.IsActive), IsMinimized: tm.data(i, R.IsMinimized) };
+        previewRow = k;
+    }
+    // the window entry under a scene point, for the rail's drag handler
+    function entryAt(sx, sy) {
+        for (const rep of [groupEntries, singleEntries]) {
+            for (let i = 0; i < rep.count; ++i) {
+                const e = rep.itemAt(i);
+                if (!e || !e.visible) continue;
+                const p = e.mapFromItem(null, sx, sy);
+                if (p.x >= 0 && p.y >= 0 && p.x < e.width && p.y < e.height) return e;
+            }
+        }
+        return null;
+    }
+    function entryIcons() {
+        const tm = r.tasksModel;
+        return [...Array(tm.rowCount(modelIndex())).keys()].map(c => tm.data(tm.makeModelIndex(index, c), Qt.DecorationRole));
     }
     // an open box of another app covers this one
     readonly property bool covered: r.stackTask !== null && r.stackTask !== task
@@ -309,6 +344,7 @@ Item {
                 opacity: task.expanded ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: 120 } }
                 Repeater {
+                    id: groupEntries
                     model: DelegateModel {
                         model: task.isGroup && (task.expanded || task.reveal > 0) ? task.r.tasksModel : null
                         rootIndex: task.isGroup ? task.r.tasksModel.makeModelIndex(task.index) : null
@@ -316,6 +352,7 @@ Item {
                     }
                 }
                 Repeater { // an app with one window, opened for a window of its kind
+                    id: singleEntries
                     model: !task.isGroup && task.running && (task.expanded || task.reveal > 0) ? 1 : 0
                     delegate: WindowEntry { owner: task; single: true }
                 }
@@ -404,30 +441,27 @@ Item {
     PlasmaCore.ToolTipArea {
         id: tipArea
         anchors.fill: parent
-        active: !task.r.dragSpec && !task.r.menuOpen && !task.canExpand && (Plasmoid.configuration.showToolTips || task.isLauncher || !task.isGroup)
+        // an app with a box previews its focused window, once the box is open
+        active: !task.r.dragSpec && !task.r.menuOpen
+                && (task.canExpand ? task.expanded : (Plasmoid.configuration.showToolTips || task.isLauncher || !task.isGroup))
         location: Plasmoid.location
         interactive: Plasmoid.configuration.showToolTips && !task.isLauncher
         mainItem: TaskToolTip {
             r: task.r
             task: task
+            child: task.canExpand ? task.previewRow : -1
+            childModel: task.canExpand ? task.previewData : null
             active: tipArea.containsMouse || task.r.toolTipOpenedByClick === task
         }
         onContainsMouseChanged: if (!containsMouse && task.r.toolTipOpenedByClick === task) task.r.toolTipOpenedByClick = null
     }
 
-    HoverHandler { id: hover }
-    DragHandler {
-        id: dragH
-        enabled: task.canDrag
-        target: null
-        acceptedButtons: Qt.LeftButton
-        onActiveChanged: if (active) {
-            task.hideToolTip();
-            const ids = task.running ? task.winIdsAt(task.modelIndex()) : [];
-            task.r.startDrag({ kind: "app", winIds: ids, launcher: task.launcher }, task.model.decoration,
-                             task.isGroup ? task.model.AppName : (task.model.display || task.model.AppName), () => dragH.active);
-        }
+    HoverHandler {
+        id: hover
+        // back on the tile of an open box: its preview at once, the box's delay already passed
+        onHoveredChanged: if (hovered && task.expanded && task.canExpand && !task.r.dragSpec) { task.updatePreview(); task.showToolTip(); }
     }
+    // dragging is done by the rail's own handler (main.qml, dragLayer), which outlives this tile
     MouseArea { // accepts the click, so Plasma's own panel menu stays closed
         anchors.fill: parent
         acceptedButtons: Qt.RightButton

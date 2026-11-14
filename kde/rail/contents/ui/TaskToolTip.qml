@@ -209,15 +209,16 @@ Item {
                 id: winHover
                 onHoveredChanged: tip.r.windowsHovered(win.model.WinIdList, hovered)
             }
-            // drag the preview like the window's entry: onto a workspace thumbnail, or the same app
-            // on another workspace (see root.startDrag)
+            // dragging the preview grabs the window itself: KWin moves it, with snapping and tiling,
+            // and hovering a rail thumbnail with it switches there (see root.grabWindow)
             DragHandler {
                 id: winDrag
                 target: null
                 enabled: win.winId !== undefined
                 onActiveChanged: if (active) {
-                    tip.r.startDrag({ kind: "window", winIds: [String(win.winId)], launcher: tip.task.launcher },
-                                    win.model.decoration, win.model.display, () => winDrag.active);
+                    tip.r.cancelHighlightWindows();
+                    tip.r.grabWindow(String(win.winId));
+                    tip.hide();
                 }
             }
             TapHandler {

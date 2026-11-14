@@ -136,11 +136,11 @@ PlasmoidItem {
             iface: "org.kde.KWin.HighlightWindow", member: "highlightWindows",
             arguments: [hovered ? winIds.map(String) : []], signature: "(as)" });
     }
-    // ---- dragging apps and windows: app tiles, window entries and window previews
-    // A drag is a platform drag from a source that outlives the tiles (the rail's drag card), so the
-    // app column can follow the desktop the drag switches to. The rail's drop area does the rest.
-    readonly property string windowMime: "application/x-onedesign-window"
-    // { kind: "app" | "window", winIds, launcher, icon, fromDesktop, startRow }; null when no drag runs
+    // ---- dragging apps and windows: app tiles and window entries
+    // One drag handler over the whole rail runs the drag (see the rail's dragLayer): it outlives the
+    // tiles, so the app column can follow the desktop the drag switches to. Off the rail, KWin takes
+    // over and moves the window itself.
+    // { kind: "app" | "window", winIds, launcher, icon, icons, fromDesktop, startRow }; null when no drag runs
     property var dragSpec: null
     property var dragActiveWin: null // the window that had focus when the drag started
     property Item incomingTask: null // an app of the same kind the drag hovers: it opens with a slot
@@ -187,23 +187,6 @@ PlasmoidItem {
         if (row >= 0 && row !== to) appModel.move(row, to);
     }
 
-    // Starts a drag once its card is drawn. spec: kind, winIds, launcher. stillHeld tells whether
-    // the button is still down by then.
-    function startDrag(spec, icon, title, stillHeld) {
-        const rail = fullRepresentationItem;
-        if (!rail || dragSpec) return;
-        rail.dragCard.icon = icon;
-        rail.dragCard.title = title || "";
-        rail.dragCard.grabToImage(result => {
-            let held = false;
-            try { held = stillHeld(); } catch (e) {} // the tile may be gone by now
-            if (!held) return;
-            beginDrag(Object.assign({ icon: icon }, spec));
-            rail.dragCard.Drag.imageSource = result.url;
-            rail.dragCard.Drag.active = true; // runs until the drop
-        });
-    }
-    // for drags with their own source (window previews in a tooltip)
     function beginDrag(spec) {
         cancelHighlightWindows();
         dragActiveWin = activeWinId();
@@ -211,12 +194,12 @@ PlasmoidItem {
         spec.startRow = spec.kind === "app" ? dragRow(spec) : -1;
         dragSpec = spec;
     }
-    // dropAction is what the drop target did: nothing when the drag ended off the rail or was cancelled
-    function finishDrag(dropAction) {
+    // dropped: let go on the rail; else cancelled, which brings the windows along after a desktop
+    // switch and takes back a reorder otherwise
+    function finishDrag(dropped) {
         const s = dragSpec;
         if (!s) return;
-        if (dropAction === Qt.IgnoreAction) {
-            // off the rail: after a desktop switch the windows come along, else a reorder is taken back
+        if (!dropped) {
             if (dragSwitched(s)) moveWindows(s.winIds, vdi.currentDesktop, true);
             else restoreOrder(s);
         }
@@ -225,6 +208,50 @@ PlasmoidItem {
         setIncoming(null, -1);
         dragSpec = null;
         dragActiveWin = null;
+    }
+    // Off the rail the drag becomes a move of the window itself, by KWin: snapping and tiling as
+    // usual. The rest of a dragged app's windows come along after a desktop switch.
+    function handOffDrag() {
+        const s = dragSpec;
+        if (!s || !s.winIds.length) return false;
+        let id = s.winIds.indexOf(String(dragActiveWin)) >= 0 ? String(dragActiveWin) : null;
+        for (let i = 0; !id && i < winModel.count; ++i) { // else the one used last
+            const w = winIdOf(winModel.makeModelIndex(i));
+            if (s.winIds.indexOf(w) >= 0) id = w;
+        }
+        if (!id) return false;
+        if (dragSwitched(s)) moveWindows(s.winIds, vdi.currentDesktop, true);
+        else restoreOrder(s);
+        if (s.kind === "app") appModel.syncLaunchers();
+        if (fullRepresentationItem) fullRepresentationItem.dragDesktop = -1;
+        setIncoming(null, -1);
+        dragSpec = null;
+        dragActiveWin = null;
+        grabWindow(id);
+        return true;
+    }
+    // KWin moves the window under the held pointer: the workspacedrag script reads which one from
+    // grabWindow and starts the move from its shortcut
+    function grabWindow(id) {
+        Plasmoid.configuration.grabWindow = String(id);
+        DBus.SessionBus.asyncCall({ service: "org.kde.kglobalaccel", path: "/component/kwin",
+            iface: "org.kde.kglobalaccel.Component", member: "invokeShortcut",
+            arguments: ["onedesign-grab-window"], signature: "(s)" });
+    }
+
+    // Where dragged windows show in the hovered thumbnail: on top if one had focus, else right
+    // behind the window focused last there, as they will land
+    property real dragLandZ: 0
+    function updateDragLandZ(deskId) {
+        const s = dragSpec;
+        if (!s) return;
+        const last = s.winIds.indexOf(String(dragActiveWin)) >= 0 ? null : lastFocusedOn(deskId, s.winIds);
+        dragLandZ = last ? stackZ(last) - 0.5 : 1e6;
+    }
+    // a window's place in the stack, highest on top
+    function stackZ(index) {
+        const st = winModel.data(index, TaskManager.AbstractTasksModel.StackingOrder);
+        return st !== undefined && st !== null ? st : 0;
     }
 
     // Puts windows at a place in their app's group, once they have joined it (a move to this
@@ -617,53 +644,147 @@ PlasmoidItem {
             z: 100
         }
 
-        // ---- drags of apps and windows (see root.startDrag): the source, and where they land
-        readonly property Item dragCard: dragCardItem
-        DragCard {
-            id: dragCardItem
-            x: -10000 // out of view: only its image is shown, under the pointer
-            Drag.dragType: Drag.Automatic
-            Drag.supportedActions: Qt.MoveAction
-            Drag.mimeData: ({ [root.windowMime]: "rail" })
-            Drag.hotSpot: Qt.point(pad + 24, pad + 22)
-            Drag.onDragFinished: dropAction => root.finishDrag(dropAction)
-        }
-        DropArea {
-            parent: stackLayerItem // above the app column and the boxes, which keep it from drops past its edges
+        // ---- drags of apps and windows (see root.beginDrag): one handler over the whole rail. It
+        // outlives the tiles, so the column can follow the desktop a drag switches to.
+        Item {
+            id: dragLayer
+            parent: stackLayerItem
             anchors.fill: parent
-            z: 1
-            keys: [root.windowMime]
-            onEntered: drag => rail.dragMoved(drag.x, drag.y)
-            onPositionChanged: drag => rail.dragMoved(drag.x, drag.y)
-            onExited: { rail.dragDesktop = -1; root.setIncoming(null, -1); root.restoreOrder(root.dragSpec); }
-            onDropped: drop => {
-                rail.dragDropped(drop.x, drop.y);
-                drop.accept(Qt.MoveAction);
-                root.finishDrag(Qt.MoveAction); // done here, before any leave that follows
+            z: 2
+            DragHandler {
+                id: railDrag
+                target: null
+                acceptedButtons: Qt.LeftButton
+                enabled: !root.editMode
+                property bool mine: false // this drag carries an app or a window
+                onActiveChanged: if (active) {
+                    const p = centroid.scenePressPosition;
+                    mine = rail.beginDragAt(p.x, p.y);
+                    if (mine) rail.dragMoved(centroid.scenePosition.x, centroid.scenePosition.y);
+                }
+                onCentroidChanged: if (active && mine) rail.dragMoved(centroid.scenePosition.x, centroid.scenePosition.y)
+                onGrabChanged: (transition, point) => {
+                    if (!mine) return;
+                    if (transition === PointerDevice.UngrabExclusive) {
+                        mine = false;
+                        rail.dragReleased(point.scenePosition.x, point.scenePosition.y);
+                    } else if (transition === PointerDevice.CancelGrabExclusive) {
+                        mine = false;
+                        root.finishDrag(false);
+                    }
+                }
             }
         }
-        // the app's tile, or the open box, under a point of the rail
-        function taskAt(x, y) {
-            const p = mapToItem(null, x, y);
+        // what the pointer carries: the tile, or the whole box of an open app
+        Item {
+            id: ghost
+            parent: stackLayerItem
+            z: 3
+            visible: root.dragSpec !== null
+            property real offX: 0
+            property real offY: 0
+            readonly property var icons: root.dragSpec && root.dragSpec.icons ? root.dragSpec.icons : []
+            readonly property int gap: Math.max(6, Plasmoid.configuration.appSpacing)
+            width: root.tile
+            height: root.tile + icons.length * (root.tile + gap)
+            Kirigami.ShadowedRectangle {
+                anchors.fill: parent
+                radius: root.tile * 0.26
+                color: Qt.rgba(root.tileLifted.r, root.tileLifted.g, root.tileLifted.b, 1)
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, root.dark ? 0.12 : 0.6)
+                shadow.size: 16
+                shadow.yOffset: 3
+                shadow.color: Qt.rgba(0, 0, 0, root.dark ? 0.4 : 0.2)
+            }
+            Kirigami.Icon {
+                x: (root.tile - width) / 2; y: (root.tile - height) / 2
+                width: Plasmoid.configuration.iconSize; height: width
+                roundToIconSize: false
+                source: root.dragSpec ? root.dragSpec.icon : ""
+            }
+            Rectangle { // the box's line between the app and its windows
+                visible: ghost.icons.length > 0
+                x: 8; width: root.tile - 16
+                y: root.tile + Math.floor(ghost.gap / 2)
+                height: 1
+                color: Kirigami.Theme.textColor
+                opacity: 0.14
+            }
+            Repeater {
+                model: ghost.icons
+                Kirigami.Icon {
+                    required property var modelData
+                    required property int index
+                    x: (root.tile - width) / 2
+                    y: root.tile + ghost.gap + index * (root.tile + ghost.gap) + (root.tile - height) / 2
+                    width: Plasmoid.configuration.iconSize; height: width
+                    roundToIconSize: false
+                    source: modelData
+                }
+            }
+        }
+
+        // the app's tile, or the open box, under a scene point
+        function taskAt(sx, sy) {
             const open = root.stackTask;
-            if (open && open.boxContains(p.x, p.y)) return open;
-            const c = appCol.mapFromItem(rail, x, y);
+            if (open && open.boxContains(sx, sy)) return open;
+            const c = appCol.mapFromItem(null, sx, sy);
             if (c.x < 0 || c.y < 0 || c.x >= appCol.width || c.y >= appCol.height) return null;
             const t = appCol.itemAt(c.x + appCol.contentX, c.y + appCol.contentY);
             return t && !t.covered && t.shown ? t : null;
         }
-        function dragMoved(x, y) {
+        // starts a drag of what is under the press: a window's entry in an open box, or an app's tile
+        function beginDragAt(sx, sy) {
+            let spec = null, item = null;
+            const open = root.stackTask;
+            const e = open ? open.entryAt(sx, sy) : null;
+            if (e && e.winId !== undefined) {
+                item = e;
+                spec = { kind: "window", winIds: [String(e.winId)], launcher: e.owner.launcher, icon: e.win.decoration, icons: [] };
+                e.hideTip();
+            } else {
+                const t = taskAt(sx, sy);
+                if (!t || !t.canDrag) return false;
+                const tp = t.mapFromItem(null, sx, sy);
+                if (tp.y < 0 || tp.y >= t.height) return false; // in its box, not on a window: nothing to drag
+                item = t;
+                spec = { kind: "app", winIds: t.running ? t.winIdsAt(t.modelIndex()) : [], launcher: t.launcher,
+                         icon: t.model.decoration, icons: t.expanded && t.isGroup ? t.entryIcons() : [] };
+                t.hideToolTip();
+            }
+            const tl = item.mapToItem(rail, (item.width - root.tile) / 2, 0);
+            const p = mapFromItem(null, sx, sy);
+            ghost.offX = p.x - tl.x;
+            ghost.offY = p.y - tl.y;
+            root.beginDrag(spec);
+            return true;
+        }
+        function dragMoved(sx, sy) {
             const s = root.dragSpec;
             if (!s) return;
-            const p = mapToItem(null, x, y);
+            const p = mapFromItem(null, sx, sy);
+            ghost.x = p.x - ghost.offX;
+            ghost.y = p.y - ghost.offY;
+            // off the rail sideways: KWin moves the window itself from here on
+            if (p.x < 0 || p.x >= width) {
+                if (root.handOffDrag()) { railDrag.mine = false; return; }
+                dragDesktop = -1;
+                root.setIncoming(null, -1);
+                root.restoreOrder(s);
+                return;
+            }
             // a thumbnail: windows go there on drop, and a dwell goes there now; launchers have no windows
-            const desk = s.winIds.length ? workspaceAt(p.x, p.y) : -1;
-            dragDesktop = desk;
+            const desk = s.winIds.length ? workspaceAt(sx, sy) : -1;
+            if (desk !== dragDesktop) {
+                dragDesktop = desk;
+                if (desk >= 0) root.updateDragLandZ(root.virtualDesktopInfo.desktopIds[desk]);
+            }
             if (desk >= 0) { root.setIncoming(null, -1); root.restoreOrder(s); return; }
-            const t = taskAt(x, y);
+            const t = taskAt(sx, sy);
             // the same app, other than the one dragged: it opens with a place for what comes
             if (t && s.winIds.length && t.launcher === s.launcher && (s.kind === "window" || !t.holdsDragged)) {
-                root.setIncoming(t, t.slotAt(p.x, p.y));
+                root.setIncoming(t, t.slotAt(sx, sy));
                 return;
             }
             root.setIncoming(null, -1);
@@ -673,21 +794,23 @@ PlasmoidItem {
                 if (row >= 0 && t.index !== row) root.tasksModel.move(row, t.index);
             }
         }
-        function dragDropped(x, y) {
+        function dragReleased(sx, sy) {
             const s = root.dragSpec;
             if (!s) return;
-            const p = mapToItem(null, x, y);
-            const desk = s.winIds.length ? workspaceAt(p.x, p.y) : -1;
+            const p = mapFromItem(null, sx, sy);
+            if (p.x < 0 || p.y < 0 || p.x >= width || p.y >= height) { root.finishDrag(false); return; }
+            const desk = s.winIds.length ? workspaceAt(sx, sy) : -1;
             if (desk >= 0) {
                 root.restoreOrder(s);
                 root.moveWindows(s.winIds, root.virtualDesktopInfo.desktopIds[desk], false);
-                return;
+            } else {
+                const t = root.incomingTask;
+                const slot = root.incomingSlot;
+                // anywhere else on the rail brings the windows to this desktop
+                if (root.dragSwitched(s) || t) root.moveWindows(s.winIds, root.virtualDesktopInfo.currentDesktop, true);
+                if (t) root.placeWindows(s.winIds, s.launcher, slot);
             }
-            const t = root.incomingTask;
-            const slot = root.incomingSlot;
-            // anywhere else on the rail brings the windows to this desktop
-            if (root.dragSwitched(s) || t) root.moveWindows(s.winIds, root.virtualDesktopInfo.currentDesktop, true);
-            if (t) root.placeWindows(s.winIds, s.launcher, slot);
+            root.finishDrag(true);
         }
 
         // the workspace thumbnail an app tile is being dragged onto, -1 for none
@@ -805,8 +928,12 @@ PlasmoidItem {
                                     required property var model
                                     readonly property var vds: model.VirtualDesktops || []
                                     readonly property var g: model.Geometry
+                                    readonly property string wid: (model.WinIdList || []).length ? String(model.WinIdList[0]) : ""
+                                    // dragged over a thumbnail, it shows there as it will land, and not where it is
+                                    readonly property bool carried: rail.dragDesktop >= 0 && root.dragSpec !== null && root.dragSpec.winIds.indexOf(wid) >= 0
                                     visible: model.IsWindow === true && !model.IsMinimized && !model.SkipPager
-                                             && (model.IsOnAllVirtualDesktops === true || vds.indexOf(ws.deskId) >= 0)
+                                             && (carried ? ws.index === rail.dragDesktop
+                                                 : model.IsOnAllVirtualDesktops === true || vds.indexOf(ws.deskId) >= 0)
                                     x: g ? Math.round(g.x * ws.s) : 0
                                     y: g ? Math.round(g.y * ws.s) : 0
                                     width: g ? Math.max(6, Math.round(g.width * ws.s)) : 0
@@ -818,7 +945,8 @@ PlasmoidItem {
                                     border.width: 1
                                     border.color: model.IsActive === true ? root.accent
                                                   : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.35)
-                                    z: model.IsActive ? 2 : 1
+                                    // as KWin stacks them: the window in front is the one in front here too
+                                    z: (carried ? root.dragLandZ : 0) + (model.StackingOrder !== undefined && model.StackingOrder !== null ? model.StackingOrder : 0) / (carried ? 1e4 : 1)
                                     Rectangle { // title strip
                                         x: 1; y: 1
                                         width: parent.width - 2

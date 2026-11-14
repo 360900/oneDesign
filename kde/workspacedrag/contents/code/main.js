@@ -112,3 +112,45 @@ function watch(window) {
 
 workspace.windowList().forEach(watch);
 workspace.windowAdded.connect(watch);
+
+// A drag that leaves the rail becomes a move of the window itself, so it snaps and tiles like any
+// other: the rail names the window in its grabWindow setting and invokes this shortcut, which has
+// no keys of its own. KWin starts the move from the window's center, so the window goes there first.
+const READ_GRAB = 'var out = ""; panels().forEach(function (p) { p.widgets().forEach(function (w) {'
+    + ' if (w.type == "org.onedesign.rail") { w.currentConfigGroup = ["General"]; var g = w.readConfig("grabWindow"); if (g) out = g; }'
+    + ' }); }); print(out);';
+
+function plainId(id) {
+    return String(id).replace(/[{}]/g, "");
+}
+
+function startMove(window) {
+    const c = workspace.cursorPos;
+    const g = window.frameGeometry;
+    window.frameGeometry = { x: c.x - g.width / 2, y: c.y - g.height / 2, width: g.width, height: g.height };
+    workspace.activeWindow = window;
+    workspace.slotWindowMove();
+}
+
+function grab(id) {
+    const window = workspace.windowList().find(w => plainId(w.internalId) === plainId(id));
+    if (!window || !window.moveable) return;
+    if (window.minimized) window.minimized = false;
+    if (!window.onAllDesktops && window.desktops.indexOf(workspace.currentDesktop) < 0) window.desktops = [workspace.currentDesktop];
+    // a maximized window takes its normal size back first, which it does a moment later
+    const settle = window.maximizeMode !== 0;
+    if (settle) window.setMaximize(false, false);
+    if (!settle) { startMove(window); return; }
+    const later = new QTimer();
+    later.interval = 60;
+    later.singleShot = true;
+    later.timeout.connect(() => startMove(window));
+    later.start();
+}
+
+registerShortcut("onedesign-grab-window", "oneDesign: move the window dragged off the rail", "", () => {
+    callDBus("org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell", "evaluateScript", READ_GRAB, reply => {
+        const id = String(reply || "").trim();
+        if (id) grab(id);
+    });
+});

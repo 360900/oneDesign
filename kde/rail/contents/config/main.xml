@@ -11,6 +11,8 @@
     <entry name="workspaceZones" type="String"><default></default></entry>
     <!-- written by the workspacedrag KWin script: an auto-hidden rail shows itself while a moved window is at its edge -->
     <entry name="revealForMove" type="Bool"><default>false</default></entry>
+    <!-- written by the rail when a drag leaves it: the window the workspacedrag KWin script then moves -->
+    <entry name="grabWindow" type="String"><default></default></entry>
 
     <!-- layout -->
     <entry name="showWorkspaces" type="Bool"><default>true</default></entry>

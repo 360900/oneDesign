@@ -110,6 +110,8 @@ Item {
         id: hover
         onHoveredChanged: {
             entry.r.windowsHovered(entry.win.WinIdList, hovered);
+            // the box is open, so its delay has passed: the preview shows at once
+            if (hovered && !entry.r.dragSpec) tipArea.showToolTip();
         }
     }
     TapHandler {
@@ -131,14 +133,6 @@ Item {
         }
     }
 
-    DragHandler {
-        id: dragH
-        target: null
-        enabled: entry.winId !== undefined
-        onActiveChanged: if (active) {
-            tipArea.hideImmediately();
-            entry.r.startDrag({ kind: "window", winIds: [String(entry.winId)], launcher: entry.owner.launcher },
-                              entry.win.decoration, entry.win.display, () => dragH.active);
-        }
-    }
+    // dragging is done by the rail's own handler (main.qml, dragLayer), which outlives the box
+    function hideTip() { tipArea.hideImmediately(); }
 }

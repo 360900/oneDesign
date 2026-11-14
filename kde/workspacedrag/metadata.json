@@ -2,7 +2,7 @@
     "KPackageStructure": "KWin/Script",
     "KPlugin": {
         "Authors": [{ "Name": "oneDesign" }],
-        "Description": "Hovering a moved window over a rail workspace switches to it",
+        "Description": "Hovering a moved window over a rail workspace switches to it, and a drag off the rail moves the window",
         "Icon": "view-pages-overview",
         "Id": "onedesign-workspacedrag",
         "License": "GPL-2.0-or-later",
