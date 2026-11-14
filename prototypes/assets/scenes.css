@@ -11,8 +11,6 @@
 .dim-ish { opacity: .85; font-weight: 450; }
 
 /* shell extras */
-.dock .grid-btn { background: var(--c-fill); color: var(--c-text); box-shadow: none; }
-.dock .grid-btn::after { display: none; }
 
 /* settings */
 .page { max-width: 720px; margin: 0 auto; padding: 18px 28px 40px; }

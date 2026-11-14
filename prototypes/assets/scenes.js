@@ -62,16 +62,6 @@
   }
 
   /* ---------------- shell pieces ---------------- */
-  function shell(now = "Sat 31 Oct  15:42") {
-    const tray = `${I("wifi")}${I("volume")}${I("battery")}`;
-    const ws = `<div class="ws"><i class="cur"></i><i></i><i></i></div>`;
-    const top = `<div class="topbar" data-role="shell"><span class="seg">${ws}</span><span class="clock">${now}</span><span class="spacer"></span><span class="seg on">${tray}</span></div>`;
-    const apps = [["files", "folder", 1], ["web", "computer", 1], ["mail", "mail"], ["music", "volume"], ["photos", "image"], ["text", "file", 1], ["term", null], ["settings", "settings"]];
-    const ai = ([k, ic], cls = "") => `<div class="appicon ${k} ${cls}">${ic ? I(ic) : `<span class="glyph">&gt;_</span>`}</div>`;
-    const dock = `<div class="dock" data-role="shell">${apps.map((a) => ai(a, a[2] ? "run" : "")).join("")}<div class="sep"></div>${ai(["store", "add"])}<div class="appicon grid-btn">${I("grid")}</div></div>`;
-    return top + dock;
-  }
-
   function quickSettings(style) {
     return `<div class="qs" data-role="float" style="${style}">
       <div class="qs-head"><div class="avatar photo"></div><div class="grow"><div style="font-weight:650">Tarik</div><div class="caption muted">87% · 6 h 20 min left</div></div>
@@ -88,20 +78,18 @@
   const tile = (ic, label, sub, on) => `<div class="tile ${on ? "on" : ""}"><div class="t-main">${I(ic)}<div class="grow"><div class="t-label">${label}</div><div class="t-sub">${sub}</div></div></div><div class="t-more">${I("chevron-right")}</div></div>`;
 
   function notification(style) {
-    return `<div class="notif" data-role="float" style="${style}"><div class="appicon mail">${I("mail")}</div><div class="grow"><div class="n-title">Maya Okafor<span class="dim">now</span></div><div class="n-body">Sent the new renders. Can you check the glass edge on the dock before tonight?</div><div class="row-flex" style="margin-top:10px;gap:8px"><span class="btn small">Reply</span><span class="btn small">Mark as Read</span></div></div></div>`;
+    return `<div class="notif" data-role="float" style="${style}"><div class="appicon mail">${I("mail")}</div><div class="grow"><div class="n-title">Maya Okafor<span class="dim">now</span></div><div class="n-body">Sent the new renders. Can you check the glass edge on the rail before tonight?</div><div class="row-flex" style="margin-top:10px;gap:8px"><span class="btn small">Reply</span><span class="btn small">Mark as Read</span></div></div></div>`;
   }
 
   /* ---------------- scenes ---------------- */
   const scenes = {};
 
   scenes.desktop = () => {
-    const qsPos = "top:52px;right:14px";
-    const nPos = "top:420px;right:14px";
     return `<div class="desktop">
-      ${filesWindow("left:70px;top:96px;width:920px;height:620px")}
-      ${shell()}
-      ${quickSettings(qsPos)}
-      ${notification(nPos)}
+      ${filesWindow("left:120px;top:70px;width:920px;height:620px")}
+      ${railShell()}
+      ${quickSettings("bottom:14px;left:80px")}
+      ${notification("top:14px;right:14px")}
     </div>`;
   };
 
@@ -324,7 +312,7 @@
       ["k", "export const"], [" ", " surfaces = {"], ["\n"],
       [" ", "  "], ["a", "canvas"], [" ", ": "], ["s", '"solid"'], [" ", ","], ["\n"],
       [" ", "  "], ["a", "sidebar"], [" ", ": "], ["s", '"solid"'], [" ", ","], ["\n"],
-      [" ", "  "], ["a", "float"], [" ", ": "], ["s", '"glass"'], [" ", ",  "], ["c", "// menus, osd, dock"], ["\n"],
+      [" ", "  "], ["a", "float"], [" ", ": "], ["s", '"glass"'], [" ", ",  "], ["c", "// menus, osd, rail"], ["\n"],
       [" ", "  "], ["a", "radius"], [" ", ": ["], ["n", "18"], [" ", ", "], ["n", "14"], [" ", ", "], ["n", "10"], [" ", ", "], ["n", "6"], [" ", "],"], ["\n"],
       [" ", "};"], ["\n"],
     ];
@@ -346,7 +334,7 @@
         ${hb([`<span class="btn icon flat">${I("add")}</span>`, title("tarik@one: ~/Projects"), spacer, `<span class="btn icon flat">${I("search")}</span><span class="btn icon flat">${I("menu")}</span>`, raw(wm())])}
         <div class="under-hb grow term-body">${termLines}</div>
       </div>
-      <div class="window editor-win" data-role="canvas" style="left:60px;top:70px;width:830px;height:620px">
+      <div class="window editor-win" data-role="canvas" style="left:110px;top:70px;width:800px;height:620px">
         ${hb(editorHb, { sep: true })}
         <div class="under-hb grow code">${editor}</div>
         <div class="statusbar"><span>Markdown</span><span>Spaces: 2</span><span class="spacer"></span><span>Ln 7, Col 24</span></div>
@@ -363,7 +351,7 @@
         <div class="d-body"><div class="title3" style="margin-bottom:8px">Save changes?</div><div class="muted">“budget.ods” has unsaved changes. Changes which are not saved will be permanently lost.</div></div>
         <div class="d-actions"><span class="btn">Cancel</span><span class="btn destructive">Discard</span><span class="btn suggested">Save</span></div>
       </div>
-      ${shell()}
+      ${railShell()}
     </div>`;
   };
 
