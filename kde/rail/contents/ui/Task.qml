@@ -161,11 +161,14 @@ Item {
         const to = Math.max(0, Math.min(r.tasksModel.count - 1, startIndex));
         if (row >= 0 && row !== to) r.tasksModel.move(row, to);
     }
-    function moveDragToDesktop(target) {
-        const deskId = r.virtualDesktopInfo.desktopIds[target];
-        if (deskId === undefined) return;
+    // keepAll leaves windows that are on all desktops there
+    function moveDragToDesktop(deskId, keepAll) {
+        if (deskId === undefined || deskId === null) return;
         for (let i = 0; i < r.tasksModel.count; ++i) {
-            if (rowHasDragWindow(i)) r.tasksModel.requestVirtualDesktops(r.tasksModel.makeModelIndex(i), [deskId]);
+            if (!rowHasDragWindow(i)) continue;
+            const index = r.tasksModel.makeModelIndex(i);
+            if (keepAll && r.tasksModel.data(index, TaskManager.AbstractTasksModel.IsOnAllVirtualDesktops) === true) continue;
+            r.tasksModel.requestVirtualDesktops(index, [deskId]);
         }
     }
 
@@ -196,9 +199,15 @@ Item {
         const railItem = r.fullRepresentationItem;
         const target = railItem ? railItem.dragDesktop : -1;
         if (railItem) railItem.dragDesktop = -1;
+        const here = r.virtualDesktopInfo.currentDesktop;
         if (dropped && target >= 0 && running) {
-            moveDragToDesktop(target);
+            moveDragToDesktop(r.virtualDesktopInfo.desktopIds[target], false);
             restoreOrder();
+        } else if (dropped && running && r.dragFromDesktop !== null && String(here) !== String(r.dragFromDesktop)) {
+            // the drag switched desktops and ended in the app column: the app comes along to this
+            // desktop, at the place it was dropped
+            moveDragToDesktop(here, true);
+            r.tasksModel.syncLaunchers();
         } else {
             r.tasksModel.syncLaunchers(); // move() alone does not touch the launcher list
         }
