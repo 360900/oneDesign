@@ -48,6 +48,7 @@
     }
   },
   "materials": { "canvas": "solid", "sidebar": "solid", "headerbar": "solid", "float": "glass", "shell": "glass", "osd": "glass", "dialog": "solid" },
+  "rail": { "tile": { "rest": { "light": 0.38, "dark": 0.10 }, "lifted": "canvas", "liftedAlpha": 0.94, "hover": { "light": 0.06, "dark": 0.09 }, "pressed": 0.25, "hoverMs": 180 } },
   "glass": {
     "blur": 12,
     "saturate": 1.35,

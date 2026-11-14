@@ -53,6 +53,18 @@ Built from layers so it reads the same over any wallpaper:
 Controls inside glass use translucent white fills instead of ink fills so the
 glass shows through.
 
+## Rail
+
+App tiles on the rail (`rail.tile`) sit on the shell glass:
+
+- **Rest.** Translucent white at `rail.tile.rest`, so the glass shows through.
+- **Focused, or open.** The `canvas` surface (`rail.tile.lifted`) at `rail.tile.liftedAlpha`.
+  An app with several windows opens on hover into a box on the same surface, floating
+  over the apps beside it with the `elevation.float` shadow, so a focused app keeps its
+  color as it opens. Focus inside the box is shown by the edge mark, not a fill.
+- **Hover and press.** A tint over the whole tile: ink at `rail.tile.hover` (black in
+  light, white in dark), accent at `rail.tile.pressed`, fading over `rail.tile.hoverMs`.
+
 ## Components
 
 | Component | Style |
