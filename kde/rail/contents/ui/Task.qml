@@ -62,7 +62,7 @@ Item {
     // entries are tiles like the apps, with the column's spacing between them
     property real entryH: r.tile
     readonly property int entryGap: Math.max(6, Plasmoid.configuration.appSpacing)
-    readonly property int boxPad: 4
+    readonly property int boxPad: 0      // the last entry's hover fills to the box's edge, as the app's does at the other
     readonly property real extra: expanded ? windows * (entryH + entryGap) + boxPad : 0
     // where the box sits in the rail's stack layer: the tile's top left
     property point boxOrigin: Qt.point(0, 0)
@@ -71,6 +71,11 @@ Item {
         if (layer) boxOrigin = task.mapToItem(layer, 0, 0);
     }
     property real reveal: extra
+    // 0..1: how far the tile has become the canvas surface, focused or open; and how far it floats
+    property real lift: active || expanded ? 1 : 0
+    Behavior on lift { NumberAnimation { duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1] } }
+    property real openness: expanded ? 1 : 0
+    Behavior on openness { NumberAnimation { duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1] } }
     Behavior on reveal { NumberAnimation { duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0, 0, 1, 1, 1] } }
     onWantExpandChanged: {
         if (wantExpand) { collapseTimer.stop(); if (!expanded) openTimer.restart(); }
@@ -301,19 +306,18 @@ Item {
             }
         }
         Kirigami.ShadowedRectangle { // resting tile: shows behind icons that are not full-bleed, and grows into the box
-            readonly property real open: task.extra > 0 ? Math.min(1, task.reveal / task.extra) : Math.min(1, task.reveal / 20)
             anchors.horizontalCenter: parent.horizontalCenter
             width: task.r.tile
             y: task.growUp ? -task.reveal : 0
             height: task.r.tile + task.reveal
             radius: task.r.tile * 0.26
-            // open, it floats over the apps beside it: an opaque surface with a soft shadow
-            color: Qt.tint(task.r.fill, Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.94 * open))
+            // focused or open it is the canvas surface; open, it floats over the apps beside it with a soft shadow
+            color: Qt.tint(task.r.fill, Qt.rgba(task.r.tileLifted.r, task.r.tileLifted.g, task.r.tileLifted.b, task.lift))
             border.width: 1
             border.color: Qt.rgba(1, 1, 1, task.r.dark ? 0.12 : 0.6)
-            shadow.size: 16 * open
+            shadow.size: 16 * task.openness
             shadow.yOffset: 3
-            shadow.color: Qt.rgba(0, 0, 0, (task.r.dark ? 0.4 : 0.2) * open)
+            shadow.color: Qt.rgba(0, 0, 0, (task.r.dark ? 0.4 : 0.2) * task.openness)
         }
         Item { // the windows, revealed as the box grows; up in the rail's stack layer, see stackLayer
             id: box
@@ -368,10 +372,8 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             width: task.r.tile; height: task.r.tile
             radius: task.r.tile * 0.26
-            color: tap.pressed ? Qt.rgba(task.r.accent.r, task.r.accent.g, task.r.accent.b, 0.25)
-                   : hover.hovered ? (task.r.dark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
-                   : task.active && !task.expanded ? (task.r.dark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.05)) : Qt.rgba(0, 0, 0, 0)
-            Behavior on color { ColorAnimation { duration: 100 } }
+            color: tap.pressed ? task.r.tilePressed : hover.hovered ? task.r.tileHover : Qt.rgba(0, 0, 0, 0)
+            Behavior on color { ColorAnimation { duration: task.r.tileHoverDuration } }
         }
         Rectangle { // asks for attention
             id: attention

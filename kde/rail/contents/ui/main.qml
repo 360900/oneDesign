@@ -28,6 +28,12 @@ PlasmoidItem {
     readonly property int gap: 6
     readonly property color accent: Kirigami.Theme.highlightColor
     readonly property color fillPressed: Qt.tint(fillHover, Qt.rgba(accent.r, accent.g, accent.b, dark ? 0.45 : 0.30))
+    // app tiles (tokens: rail.tile). Focused, or open as a box, a tile is the canvas surface
+    // (Plasma's Window color); hover and press lay a tint over it.
+    readonly property color tileLifted: Qt.tint(fill, Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.94))
+    readonly property color tileHover: dark ? Qt.rgba(1, 1, 1, 0.09) : Qt.rgba(0, 0, 0, 0.06)
+    readonly property color tilePressed: Qt.rgba(accent.r, accent.g, accent.b, 0.25)
+    readonly property int tileHoverDuration: 180
 
     // shared with Task, TaskMenu and TaskToolTip
     readonly property alias tasksModel: appModel

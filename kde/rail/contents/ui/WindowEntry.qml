@@ -60,15 +60,11 @@ Item {
         else tm.requestActivate(idx);
     }
 
-    // concentric inside the box: its radius less the inset
-    readonly property int inset: 2
-    Rectangle {
+    Rectangle { // hover and press, the whole tile like the app's: the last one meets the box's corners
         anchors.fill: parent
-        anchors.margins: entry.inset
-        radius: Math.max(4, entry.r.tile * 0.26 - entry.inset)
-        color: tap.pressed ? Qt.rgba(entry.r.accent.r, entry.r.accent.g, entry.r.accent.b, 0.25)
-               : hover.hovered ? (entry.r.dark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10)) : Qt.rgba(0, 0, 0, 0)
-        Behavior on color { ColorAnimation { duration: 120 } }
+        radius: entry.r.tile * 0.26
+        color: tap.pressed ? entry.r.tilePressed : hover.hovered ? entry.r.tileHover : Qt.rgba(0, 0, 0, 0)
+        Behavior on color { ColorAnimation { duration: entry.r.tileHoverDuration } }
     }
     Kirigami.Icon {
         anchors.centerIn: parent
