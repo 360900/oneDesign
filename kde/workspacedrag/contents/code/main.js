@@ -138,13 +138,14 @@ function toCurrentDesktop(window) {
 // move, or at the first switch after a move that never started.
 function carry(window, along) {
     if (!along.length) return;
-    const follow = () => {
-        if (!window.move) { done(); return; }
-        along.forEach(w => { if (!w.deleted) toCurrentDesktop(w); });
-    };
+    let follow = null;
     const done = () => {
         workspace.currentDesktopChanged.disconnect(follow);
         window.interactiveMoveResizeFinished.disconnect(done);
+    };
+    follow = () => {
+        if (!window.move) { done(); return; }
+        along.forEach(w => { if (!w.deleted) toCurrentDesktop(w); });
     };
     workspace.currentDesktopChanged.connect(follow);
     window.interactiveMoveResizeFinished.connect(done);
