@@ -142,9 +142,12 @@ ConfigBase {
             });
         }
 
+        // KDE's QML text field pads 6px; 14 matches the line edit inset (density.padX)
         Kirigami.FormLayout {
             QQC.TextField {
                 id: nameField
+                leftPadding: 14
+                rightPadding: 14
                 Kirigami.FormData.label: i18n("Name:")
                 placeholderText: i18n("VPN")
             }
@@ -162,18 +165,24 @@ ConfigBase {
             }
             QQC.TextField {
                 id: cmdField
+                leftPadding: 14
+                rightPadding: 14
                 Kirigami.FormData.label: i18n("Command:")
                 Layout.fillWidth: true
                 placeholderText: "nmcli connection up work-vpn"
             }
             QQC.TextField {
                 id: offField
+                leftPadding: 14
+                rightPadding: 14
                 Kirigami.FormData.label: i18n("Off command:")
                 Layout.fillWidth: true
                 placeholderText: i18n("Optional, makes the tile a toggle")
             }
             QQC.TextField {
                 id: statusField
+                leftPadding: 14
+                rightPadding: 14
                 Kirigami.FormData.label: i18n("Status command:")
                 Layout.fillWidth: true
                 placeholderText: i18n("Optional, exit code 0 means on")

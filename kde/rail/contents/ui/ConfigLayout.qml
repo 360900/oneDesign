@@ -44,14 +44,16 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: i18n("Most workspaces:")
             from: 1; to: 12
             enabled: showWs.checked && addWs.checked
+            // Kvantum puts the QML spin box text flush left; 14 matches the line edit inset (density.padX)
+            leftPadding: 14
         }
 
         Item { Kirigami.FormData.isSection: true; Kirigami.FormData.label: i18n("Apps") }
         QQC.CheckBox { id: showApps; text: i18n("Show apps") }
         QQC.CheckBox { id: sep; text: i18n("Show a separator between workspaces and apps") }
-        QQC.SpinBox { id: tile; Kirigami.FormData.label: i18n("Tile size:"); from: 36; to: 52; enabled: showApps.checked }
-        QQC.SpinBox { id: icon; Kirigami.FormData.label: i18n("Icon size:"); from: 20; to: 48; enabled: showApps.checked }
-        QQC.SpinBox { id: spacing; Kirigami.FormData.label: i18n("Spacing:"); from: 0; to: 20; enabled: showApps.checked }
+        QQC.SpinBox { id: tile; Kirigami.FormData.label: i18n("Tile size:"); from: 36; to: 52; enabled: showApps.checked; leftPadding: 14 }
+        QQC.SpinBox { id: icon; Kirigami.FormData.label: i18n("Icon size:"); from: 20; to: 48; enabled: showApps.checked; leftPadding: 14 }
+        QQC.SpinBox { id: spacing; Kirigami.FormData.label: i18n("Spacing:"); from: 0; to: 20; enabled: showApps.checked; leftPadding: 14 }
 
         Item { Kirigami.FormData.isSection: true; Kirigami.FormData.label: i18n("Panel") }
         QQC.CheckBox { id: fillMax; text: i18n("Use the full screen height while a window is maximized") }

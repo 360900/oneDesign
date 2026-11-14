@@ -29,8 +29,9 @@ KCM.SimpleKCM {
 
     Kirigami.FormLayout {
         Item { Kirigami.FormData.isSection: true; Kirigami.FormData.label: i18n("Drawer") }
-        QQC.SpinBox { id: width; Kirigami.FormData.label: i18n("Width:"); from: 220; to: 440; stepSize: 8 }
-        QQC.SpinBox { id: icon; Kirigami.FormData.label: i18n("Icon size:"); from: 20; to: 40 }
+        // Kvantum puts the QML spin box text flush left; 14 matches the line edit inset (density.padX)
+        QQC.SpinBox { id: width; Kirigami.FormData.label: i18n("Width:"); from: 220; to: 440; stepSize: 8; leftPadding: 14 }
+        QQC.SpinBox { id: icon; Kirigami.FormData.label: i18n("Icon size:"); from: 20; to: 40; leftPadding: 14 }
         QQC.CheckBox { id: closeUnfocused; text: i18n("Close when it loses focus") }
 
         Item { Kirigami.FormData.isSection: true; Kirigami.FormData.label: i18n("Apps") }
