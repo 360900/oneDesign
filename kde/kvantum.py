@@ -451,7 +451,7 @@ def kvconfig(th, name, menu_F, menu_D, tip_F, tip_D):
         "popup_blurring": "true", "vertical_spin_indicators": "false", "inline_spin_indicators": "true",
         "inline_spin_separator": "false", "spin_button_width": 28, "fill_rubberband": "false",
         "merge_menubar_with_toolbar": "false", "small_icon_size": 16, "large_icon_size": 32,
-        "button_icon_size": 16, "toolbar_icon_size": 16, "combo_as_lineedit": "false",
+        "button_icon_size": 16, "toolbar_icon_size": 16, "combo_as_lineedit": "true",
         "square_combo_button": "false", "combo_menu": "true", "hide_combo_checkboxes": "true",
         "combo_focus_rect": "false", "spread_header": "true", "layout_spacing": 6, "layout_margin": 12,
         "tooltip_delay": -1, "submenu_overlap": 0, "submenu_delay": 200, "animate_states": "true",
