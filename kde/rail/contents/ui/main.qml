@@ -898,8 +898,12 @@ PlasmoidItem {
             visible: Plasmoid.configuration.showWorkspaces
             acceptedButtons: Qt.NoButton
             onWheel: wheel => {
+                // down or right goes to the next one
+                const a = wheel.angleDelta;
+                const delta = Math.abs(a.x) > Math.abs(a.y) ? a.x : a.y;
+                if (!delta) return;
                 const n = vdi.numberOfDesktops;
-                const i = root.currentIndex() + (wheel.angleDelta.y < 0 ? 1 : -1);
+                const i = root.currentIndex() + (delta < 0 ? 1 : -1);
                 root.switchTo(((i % n) + n) % n + 1);
             }
         }
