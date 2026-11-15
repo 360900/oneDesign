@@ -110,7 +110,7 @@ EOF
 deploy() {
     one=$DIR/kde/one-theme
     say "Building"
-    "$one" build --accent "${1:-blue}" --wall "${2:-wave}"
+    "$one" build --accent "${1:-wallpaper}" --wall "${2:-wave}"
     "$one" install
     shift 2
     "$one" apply "$@" $LIVE

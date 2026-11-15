@@ -13,7 +13,7 @@ Accent and wallpaper are baked at build time because Kvantum SVGs cannot follow 
 ## Use
 
 ```sh
-kde/one-theme build [--accent blue] [--wall wave] [--shell rail|bar]   # -> build/kde/
+kde/one-theme build [--accent wallpaper] [--wall wave] [--shell rail|bar]   # -> build/kde/
 kde/one-theme install                                 # -> ~/.local/share, ~/.config
 kde/one-theme apply [--mode auto|light|dark] [--layout] [--live] [--keep-wallpaper]
 kde/one-theme restore [--original] [--live]           # undo the last apply, or every apply
