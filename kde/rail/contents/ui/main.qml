@@ -889,13 +889,8 @@ PlasmoidItem {
         Component.onCompleted: zonesTimer.restart()
 
         MouseArea {
-            // wheel anywhere on the workspace block cycles desktops
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: col.top
-            anchors.topMargin: wsCol.y
-            height: wsCol.height
-            visible: Plasmoid.configuration.showWorkspaces
+            // wheel anywhere on the rail cycles desktops; the app column keeps its own wheel action when one is set
+            anchors.fill: parent
             acceptedButtons: Qt.NoButton
             onWheel: wheel => {
                 // down or right goes to the next one
