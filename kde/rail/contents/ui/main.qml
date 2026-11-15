@@ -200,7 +200,7 @@ PlasmoidItem {
         const s = dragSpec;
         if (!s) return;
         if (!dropped) {
-            if (dragSwitched(s)) moveWindows(s.winIds, vdi.currentDesktop, true);
+            if (dragSwitched(s)) moveWindows(s.winIds, vdi.currentDesktop);
             else restoreOrder(s);
         }
         if (s.kind === "app") appModel.syncLaunchers(); // move() alone does not touch the launcher list
@@ -292,8 +292,8 @@ PlasmoidItem {
 
     // Moves windows onto one desktop and goes there, keeping their focus: the one that had focus has
     // it there too, the others land behind the window last focused there, or take focus when nothing
-    // there had it. keepAll leaves windows that are on all desktops there.
-    function moveWindows(winIds, deskId, keepAll) {
+    // there had it. Windows on all desktops stay there.
+    function moveWindows(winIds, deskId) {
         if (deskId === undefined || deskId === null) return;
         const want = winIds.map(String);
         const moved = [];
@@ -301,7 +301,7 @@ PlasmoidItem {
             const index = winModel.makeModelIndex(i);
             const id = winIdOf(index);
             if (id === null || want.indexOf(id) < 0) continue;
-            if (keepAll && winModel.data(index, TaskManager.AbstractTasksModel.IsOnAllVirtualDesktops) === true) continue;
+            if (winModel.data(index, TaskManager.AbstractTasksModel.IsOnAllVirtualDesktops) === true) continue;
             const vds = winModel.data(index, TaskManager.AbstractTasksModel.VirtualDesktops) || [];
             if (vds.length === 1 && String(vds[0]) === String(deskId)) continue; // already there
             winModel.requestVirtualDesktops(index, [deskId]);
@@ -832,12 +832,12 @@ PlasmoidItem {
             const desk = s.winIds.length ? workspaceAt(sx, sy) : -1;
             if (desk >= 0) {
                 root.restoreOrder(s);
-                root.moveWindows(s.winIds, root.virtualDesktopInfo.desktopIds[desk], false);
+                root.moveWindows(s.winIds, root.virtualDesktopInfo.desktopIds[desk]);
             } else {
                 const t = root.incomingTask;
                 const slot = root.incomingSlot;
                 // anywhere else on the rail brings the windows to this desktop
-                if (root.dragSwitched(s) || t) root.moveWindows(s.winIds, root.virtualDesktopInfo.currentDesktop, true);
+                if (root.dragSwitched(s) || t) root.moveWindows(s.winIds, root.virtualDesktopInfo.currentDesktop);
                 if (t) root.placeWindows(s.winIds, s.launcher, slot);
             }
             root.finishDrag(true);
