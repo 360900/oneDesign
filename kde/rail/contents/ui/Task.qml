@@ -68,8 +68,13 @@ Item {
         target: task.r
         function onDragSpecChanged() { task.updateDragged() }
     }
+    // a reorder resorts the model, which can hand this tile another task without an index change
+    readonly property var winIdList: model.WinIdList
     onIndexChanged: if (r.dragSpec) updateDragged()
     onWindowsChanged: if (r.dragSpec) updateDragged()
+    onWinIdListChanged: if (r.dragSpec) updateDragged()
+    onLauncherChanged: if (r.dragSpec) updateDragged()
+    onIsLauncherChanged: if (r.dragSpec) updateDragged()
     // the dragged app keeps its place in the column, faint
     readonly property bool dragged: r.dragSpec !== null && r.dragSpec.kind === "app" && holdsDragged
 
