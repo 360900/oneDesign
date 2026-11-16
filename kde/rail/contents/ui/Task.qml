@@ -200,7 +200,7 @@ Item {
     Timer { id: publishTimer; interval: 200; onTriggered: task.publishGeometry() }
     onYChanged: { publishTimer.restart(); if (reveal > 0) placeBox(); }
     onRunningChanged: { updateAudioStreams(); publishTimer.restart(); }
-    Component.onCompleted: { publishTimer.restart(); updateAudioStreams(); }
+    Component.onCompleted: { publishTimer.restart(); updateAudioStreams(); if (r.dragSpec) updateDragged(); }
 
     // ---- click: KDE's activateTask
     function activate(modifiers) {
