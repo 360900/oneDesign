@@ -123,11 +123,12 @@ def gtk_css(light, dark, version):
     shape and keeps the colors KDE generates from the active scheme.
     """
     sh = light.shape
+    r = sh["window"]
     colors = ""
     if version == 4:
         colors = f""":root {{
 {_gtk_vars(light, "  ")}
-  --window-radius: {sh['window']}px;
+  --window-radius: {r}px;
 }}
 @media (prefers-color-scheme: dark) {{
   :root {{
@@ -135,12 +136,25 @@ def gtk_css(light, dark, version):
   }}
 }}
 """
+    if version == 4:
+        corners = f"window.csd, window.csd > .titlebar, dialog.csd {{ border-radius: {r}px {r}px 0 0; }}"
+    else:
+        # The titlebar paints the corner, but GTK 3 sizes the shadow from the decoration.
+        # Both have to match, or the gap between them lets the desktop through; rounding
+        # the window node itself instead would cut the client area below the titlebar.
+        corners = (
+            f"window.csd:not(.maximized):not(.fullscreen):not(.tiled):not(.solid-csd) > .titlebar,\n"
+            f"dialog.csd:not(.maximized):not(.fullscreen):not(.tiled):not(.solid-csd) > .titlebar,\n"
+            "window.csd:not(.popup):not(.tooltip):not(.maximized):not(.fullscreen):not(.tiled):not(.solid-csd) decoration,\n"
+            "dialog.csd:not(.maximized):not(.fullscreen):not(.tiled):not(.solid-csd) decoration "
+            f"{{ border-radius: {r}px {r}px 0 0; }}"
+        )
     return f"""/* oneDesign:begin */
 {colors}button, entry, spinbutton, dropdown > button, combobox > box > button {{ border-radius: {sh['control']}px; }}
 .card, list.boxed-list, .boxed-list, preferencesgroup list {{ border-radius: {sh['container']}px; }}
 popover > contents, popover.menu > contents {{ border-radius: {sh['container']}px; }}
 popover modelbutton, popover.menu modelbutton {{ border-radius: {sh['small']}px; }}
-window.csd, window.csd > .titlebar, dialog.csd {{ border-radius: {sh['window']}px {sh['window']}px 0 0; }}
+{corners}
 /* oneDesign:end */
 """
 
