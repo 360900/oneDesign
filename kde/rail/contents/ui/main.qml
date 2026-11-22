@@ -892,13 +892,20 @@ PlasmoidItem {
             // wheel anywhere on the rail cycles desktops; the app column keeps its own wheel action when one is set
             anchors.fill: parent
             acceptedButtons: Qt.NoButton
+            // a mouse notch is 120; a touchpad sends its scroll in many smaller deltas
+            property real wheelAcc: 0
             onWheel: wheel => {
-                // down or right goes to the next one
+                // down goes to the next one; horizontal runs the other way round
                 const a = wheel.angleDelta;
-                const delta = Math.abs(a.x) > Math.abs(a.y) ? a.x : a.y;
+                const delta = Math.abs(a.x) > Math.abs(a.y) ? -a.x : a.y;
                 if (!delta) return;
+                if (wheelAcc * delta < 0) wheelAcc = 0; // a turn the other way starts over
+                wheelAcc += delta;
+                const steps = Math.trunc(wheelAcc / 120);
+                if (!steps) return;
+                wheelAcc -= steps * 120;
                 const n = vdi.numberOfDesktops;
-                const i = root.currentIndex() + (delta < 0 ? 1 : -1);
+                const i = root.currentIndex() - steps;
                 root.switchTo(((i % n) + n) % n + 1);
             }
         }
