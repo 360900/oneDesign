@@ -183,7 +183,7 @@ Name={name.replace('One', 'One ')}
 Comment=oneDesign window decoration
 X-KDE-PluginInfo-Name={name}
 X-KDE-PluginInfo-Author=oneDesign
-X-KDE-PluginInfo-Version=0.1
+X-KDE-PluginInfo-Version=0.2
 X-KDE-PluginInfo-License=GPL-3.0-or-later
 X-KDE-ServiceTypes=KWin/Decoration
 """

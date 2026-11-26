@@ -213,7 +213,7 @@ def metadata(dark):
             "Id": ident(dark),
             "License": "GPL-3.0-or-later",
             "Name": name,
-            "Version": "0.1",
+            "Version": "0.2",
             "Website": "",
         },
         "X-Plasma-APIVersion": "2",
